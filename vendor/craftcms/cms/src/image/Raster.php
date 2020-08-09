@@ -159,7 +159,7 @@ class Raster extends Image
         $mimeType = FileHelper::getMimeType($path, null, false);
 
         if ($mimeType !== null && strpos($mimeType, 'image/') !== 0 && strpos($mimeType, 'application/pdf') !== 0) {
-            throw new ImageException(Craft::t('app', 'The file “{name}” does not appear to be an image.', ['name' => pathinfo($path, PATHINFO_BASENAME)]));
+            throw new ImageException(Craft::t('app', 'The file “{name}” does not appear to be an image.', ['name' => basename($path)]));
         }
 
         try {
@@ -265,6 +265,9 @@ class Raster extends Image
             $newWidth = $this->getWidth();
             $targetHeight = round($targetHeight / $factor);
             $targetWidth = round($targetWidth / $factor);
+        } else {
+            $newHeight = $this->getHeight();
+            $newWidth = $this->getWidth();
         }
 
         if (is_array($cropPosition)) {

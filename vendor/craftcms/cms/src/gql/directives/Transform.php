@@ -51,7 +51,7 @@ class Transform extends Directive
                 DirectiveLocation::FIELD,
             ],
             'args' => TransformArguments::getArguments(),
-            'description' => 'This directive is used to return a URL for an [asset tranform](https://docs.craftcms.com/v3/image-transforms.html). It accepts the same arguments you would use for a transform in Craft and adds the `immediately` argument.'
+            'description' => 'This directive is used to return a URL for an [asset transform](https://craftcms.com/docs/3.x/image-transforms.html). It accepts the same arguments you would use for a transform in Craft and adds the `immediately` argument.'
         ]));
 
         return $type;
@@ -70,11 +70,11 @@ class Transform extends Directive
      */
     public static function apply($source, $value, array $arguments, ResolveInfo $resolveInfo)
     {
-        $onAssetElement = $source === null && $value instanceof Asset;
-        $onAssetElementList = $source === null && is_array($value) && !empty($value);
+        $onAssetElement = $value instanceof Asset;
+        $onAssetElementList = is_array($value) && !empty($value);
         $onApplicableAssetField = $source instanceof Asset && in_array($resolveInfo->fieldName, ['height', 'width', 'url']);
 
-        if (!($onAssetElement || $onAssetElementList || $onApplicableAssetField) || empty($arguments) ) {
+        if (!($onAssetElement || $onAssetElementList || $onApplicableAssetField) || empty($arguments)) {
             return $value;
         }
 
@@ -105,14 +105,13 @@ class Transform extends Directive
             return $value;
         }
 
-        switch ($resolveInfo->fieldName)
-        {
+        switch ($resolveInfo->fieldName) {
             case 'height':
                 return $source->getHeight($transform);
             case 'width':
                 return $source->getWidth($transform);
             case 'url':
-                return Craft::$app->getAssets()->getAssetUrl($source, $transform, $generateNow);
+                return $source->getUrl($transform, $generateNow);
         }
 
         return $value;

@@ -19,6 +19,7 @@ use craft\helpers\ArrayHelper;
 use craft\helpers\Console;
 use craft\helpers\FileHelper;
 use craft\helpers\StringHelper;
+use craft\migrations\CreateDbCacheTable;
 use craft\migrations\CreatePhpSessionTable;
 use Seld\CliPrompt\CliPrompt;
 use yii\base\InvalidConfigException;
@@ -95,6 +96,11 @@ class SetupController extends Controller
      */
     public function actionIndex(): int
     {
+        if (Craft::$app->id === 'CraftCMS' && !App::env('APP_ID')) {
+            $this->run('app-id');
+            $this->stdout(PHP_EOL);
+        }
+
         if (!Craft::$app->getConfig()->getGeneral()->securityKey) {
             $this->run('security-key');
             $this->stdout(PHP_EOL);
@@ -106,7 +112,7 @@ class SetupController extends Controller
 
         $this->run('db-creds');
 
-        if (Craft::$app->getIsInstalled()) {
+        if (Craft::$app->getIsInstalled(true)) {
             $this->stdout("It looks like Craft is already installed, so we're done here." . PHP_EOL, Console::FG_YELLOW);
             return ExitCode::OK;
         }
@@ -151,9 +157,27 @@ EOD;
         $this->stdout(str_replace("\n", PHP_EOL, $craft), Console::FG_YELLOW);
 
         // Can't do anything interactive here (https://github.com/composer/composer/issues/3299)
+        $this->run('app-id');
         $this->run('security-key');
         $this->stdout(PHP_EOL . 'Welcome to Craft CMS! Run the following command if you want to setup Craft from your terminal:' . PHP_EOL);
         $this->_outputCommand('setup');
+        return ExitCode::OK;
+    }
+
+    /**
+     * Generates a new application ID and saves it in the .env file.
+     *
+     * @return int
+     * @since 3.4.25
+     */
+    public function actionAppId(): int
+    {
+        $this->stdout('Generating an application ID ... ', Console::FG_YELLOW);
+        $key = 'CraftCMS--' . StringHelper::UUID();
+        if (!$this->_setEnvVar('APP_ID', $key)) {
+            return ExitCode::UNSPECIFIED_ERROR;
+        }
+        $this->stdout("done ({$key})" . PHP_EOL, Console::FG_YELLOW);
         return ExitCode::OK;
     }
 
@@ -164,7 +188,7 @@ EOD;
      */
     public function actionSecurityKey(): int
     {
-        $this->stdout(PHP_EOL . 'Generating a security key ... ', Console::FG_YELLOW);
+        $this->stdout('Generating a security key ... ', Console::FG_YELLOW);
         $key = Craft::$app->getSecurity()->generateRandomString();
         if (!$this->_setEnvVar('SECURITY_KEY', $key)) {
             return ExitCode::UNSPECIFIED_ERROR;
@@ -182,8 +206,8 @@ EOD;
      */
     public function actionDbCreds(): int
     {
-        $firstTime = true;
         $badUserCredentials = false;
+        $isNitro = App::isNitro();
 
         top:
 
@@ -201,38 +225,40 @@ EOD;
         }
 
         // server
-        $this->server = $this->prompt('Database server name or IP address:', [
-            'required' => true,
-            'default' => $this->server ?: '127.0.0.1',
-        ]);
-        $this->server = strtolower($this->server);
+        if ($isNitro) {
+            $this->server = '127.0.0.1';
+        } else {
+            $this->server = $this->prompt('Database server name or IP address:', [
+                'required' => true,
+                'default' => $this->server ?: '127.0.0.1',
+            ]);
+            $this->server = strtolower($this->server);
+        }
 
         // port
-        if ($firstTime) {
-            $defaultPort = $this->driver === Connection::DRIVER_MYSQL ? 3306 : 5432;
-        } else {
-            $defaultPort = $this->port;
-        }
-        $this->port = $this->prompt('Database port:', [
+        $this->port = (int)$this->prompt('Database port:', [
             'required' => true,
-            'default' => $defaultPort,
+            'default' => $this->port ?: ($this->driver === Connection::DRIVER_MYSQL ? 3306 : 5432),
             'validator' => function(string $input): bool {
                 return is_numeric($input);
             }
         ]);
-        $this->port = (int)$this->port;
 
         userCredentials:
 
-        // user
-        $this->user = $this->prompt('Database username:', [
-            'default' => $this->user ?: null,
-        ]);
+        // user & password
+        if ($isNitro) {
+            $this->user = 'nitro';
+            $this->password = 'nitro';
+        } else {
+            $this->user = $this->prompt('Database username:', [
+                'default' => $this->user ?: null,
+            ]);
 
-        // password
-        if ($this->interactive) {
-            $this->stdout('Database password: ');
-            $this->password = CliPrompt::hiddenPrompt(true);
+            if ($this->interactive) {
+                $this->stdout('Database password: ');
+                $this->password = CliPrompt::hiddenPrompt(true);
+            }
         }
 
         if ($badUserCredentials) {
@@ -263,7 +289,7 @@ EOD;
             'default' => $this->tablePrefix ?: null,
             'validator' => function(string $input): bool {
                 if (strlen(StringHelper::ensureRight($input, '_')) > 6) {
-                    Console::stderr($this->ansiFormat('The table prefix must be 5 or less characters long.' . PHP_EOL, Console::FG_RED));
+                    $this->stderr('The table prefix must be 5 or less characters long.' . PHP_EOL, Console::FG_RED);
                     return false;
                 }
                 return true;
@@ -286,6 +312,10 @@ EOD;
 
         test:
 
+        $dbConfig->driver = $this->driver;
+        $dbConfig->server = $this->server;
+        $dbConfig->port = $this->port;
+        $dbConfig->database = $this->database;
         $dbConfig->dsn = "{$this->driver}:host={$this->server};port={$this->port};dbname={$this->database};";
         $dbConfig->user = $this->user;
         $dbConfig->password = $this->password;
@@ -343,7 +373,6 @@ EOD;
                 return ExitCode::UNSPECIFIED_ERROR;
             }
 
-            $firstTime = false;
             goto top;
         }
 
@@ -352,8 +381,21 @@ EOD;
         $this->stdout('success!' . PHP_EOL, Console::FG_GREEN);
         $this->stdout('Saving database credentials to your .env file ... ', Console::FG_YELLOW);
 
+        // If there's a DB_DSN environment variable, go with that
+        if (App::env('DB_DSN') !== false) {
+            if (!$this->_setEnvVar('DB_DSN', $dbConfig->dsn)) {
+                return ExitCode::UNSPECIFIED_ERROR;
+            }
+        } else if (
+            !$this->_setEnvVar('DB_DRIVER', $this->driver) ||
+            !$this->_setEnvVar('DB_SERVER', $this->server) ||
+            !$this->_setEnvVar('DB_PORT', $this->port) ||
+            !$this->_setEnvVar('DB_DATABASE', $this->database)
+        ) {
+            return ExitCode::UNSPECIFIED_ERROR;
+        }
+
         if (
-            !$this->_setEnvVar('DB_DSN', $dbConfig->dsn) ||
             !$this->_setEnvVar('DB_USER', $this->user) ||
             !$this->_setEnvVar('DB_PASSWORD', $this->password) ||
             !$this->_setEnvVar('DB_SCHEMA', $this->schema) ||
@@ -400,14 +442,37 @@ EOD;
     }
 
     /**
+     * Creates a database table for storing DB caches.
+     *
+     * @return int
+     * @since 3.4.14
+     */
+    public function actionDbCacheTable(): int
+    {
+        if (Craft::$app->getDb()->tableExists(Table::CACHE)) {
+            $this->stdout('The `cache` table already exists.' . PHP_EOL . PHP_EOL, Console::FG_YELLOW);
+            return ExitCode::OK;
+        }
+
+        $migration = new CreateDbCacheTable();
+        if ($migration->up() === false) {
+            $this->stderr('An error occurred while creating the `cache` table.' . PHP_EOL . PHP_EOL, Console::FG_RED);
+            return ExitCode::UNSPECIFIED_ERROR;
+        }
+
+        $this->stdout('The `cache` table was created successfully.' . PHP_EOL . PHP_EOL, Console::FG_GREEN);
+        return ExitCode::OK;
+    }
+
+    /**
      * Outputs a terminal command.
      *
      * @param string $command
      */
     private function _outputCommand(string $command)
     {
-        $script = FileHelper::normalizePath(Craft::$app->getRequest()->getScriptFile());
-        if (!Platform::isWindows() && ($home = getenv('HOME')) !== false) {
+        $script = FileHelper::normalizePath($this->request->getScriptFile());
+        if (!Platform::isWindows() && ($home = App::env('HOME')) !== false) {
             $home = FileHelper::normalizePath($home);
             if (strpos($script, $home . DIRECTORY_SEPARATOR) === 0) {
                 $script = '~' . substr($script, strlen($home));

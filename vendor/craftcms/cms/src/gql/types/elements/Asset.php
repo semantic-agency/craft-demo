@@ -9,8 +9,6 @@ namespace craft\gql\types\elements;
 
 use Craft;
 use craft\elements\Asset as AssetElement;
-use craft\gql\base\ObjectType;
-use craft\gql\interfaces\Element as ElementInterface;
 use craft\gql\interfaces\elements\Asset as AssetInterface;
 use GraphQL\Type\Definition\ResolveInfo;
 
@@ -54,7 +52,7 @@ class Asset extends Element
                 $transform = $arguments;
             }
 
-            return Craft::$app->getAssets()->getAssetUrl($source, $transform, $generateNow);
+            return $source->getUrl($transform, $generateNow);
         }
 
         return parent::resolve($source, $arguments, $context, $resolveInfo);

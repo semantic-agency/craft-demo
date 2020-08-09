@@ -9,7 +9,6 @@ namespace craft\elements\db;
 
 use Craft;
 use craft\base\ElementInterface;
-use craft\base\Field;
 use craft\base\FieldInterface;
 use craft\db\Query;
 use craft\db\Table;
@@ -135,6 +134,10 @@ class ElementRelationParamParser extends BaseObject
      */
     private function _subparse($relCriteria)
     {
+        if (!is_array($relCriteria)) {
+            $relCriteria = ['element' => $relCriteria];
+        }
+
         // Merge in default criteria params
         $relCriteria = array_merge([
             'field' => null,
@@ -160,10 +163,6 @@ class ElementRelationParamParser extends BaseObject
                 }
                 $relCriteria['sourceSite'] = $site->id;
             }
-        }
-
-        if (!is_array($relCriteria)) {
-            $relCriteria = ['element' => $relCriteria];
         }
 
         // Get the element IDs, wherever they are
@@ -271,7 +270,6 @@ class ElementRelationParamParser extends BaseObject
                     return false;
                 }
 
-                /** @var Field $fieldModel */
                 if ($fieldModel instanceof BaseRelationField) {
                     // We'll deal with normal relation fields all together
                     $relationFieldIds[] = $fieldModel->id;
@@ -286,7 +284,6 @@ class ElementRelationParamParser extends BaseObject
 
                         foreach ($blockTypes as $blockType) {
                             foreach ($blockType->getFields() as $blockTypeField) {
-                                /** @var Field $blockTypeField */
                                 if ($blockTypeField->handle == $fieldHandleParts[1]) {
                                     $blockTypeFieldIds[] = $blockTypeField->id;
                                     break;
@@ -308,26 +305,27 @@ class ElementRelationParamParser extends BaseObject
                         $targetMatrixElementsAlias = 'target_matrixelements' . self::$_relateTargetMatrixBlocksCount;
 
                         $subQuery = (new Query())
-                            ->select([$sourcesAlias . '.targetId'])
+                            ->select(["$sourcesAlias.targetId"])
                             ->from([$sourcesAlias => Table::RELATIONS])
-                            ->innerJoin(Table::MATRIXBLOCKS . ' ' . $targetMatrixBlocksAlias, "[[{$targetMatrixBlocksAlias}.id]] = [[{$sourcesAlias}.sourceId]]")
-                            ->innerJoin(Table::ELEMENTS . ' ' . $targetMatrixElementsAlias, "[[{$targetMatrixElementsAlias}.id]] = [[{$targetMatrixBlocksAlias}.id]]")
+                            ->innerJoin([$targetMatrixBlocksAlias => Table::MATRIXBLOCKS], "[[{$targetMatrixBlocksAlias}.id]] = [[{$sourcesAlias}.sourceId]]")
+                            ->innerJoin([$targetMatrixElementsAlias => Table::ELEMENTS], "[[{$targetMatrixElementsAlias}.id]] = [[{$targetMatrixBlocksAlias}.id]]")
                             ->where([
-                                $targetMatrixBlocksAlias . '.ownerId' => $relElementIds,
-                                $targetMatrixBlocksAlias . '.fieldId' => $fieldModel->id,
-                                $targetMatrixElementsAlias . '.dateDeleted' => null,
+                                "$targetMatrixBlocksAlias.ownerId" => $relElementIds,
+                                "$targetMatrixBlocksAlias.fieldId" => $fieldModel->id,
+                                "$targetMatrixElementsAlias.enabled" => true,
+                                "$targetMatrixElementsAlias.dateDeleted" => null,
                             ]);
 
                         if ($relCriteria['sourceSite']) {
                             $subQuery->andWhere([
                                 'or',
-                                [$sourcesAlias . '.sourceSiteId' => null],
-                                [$sourcesAlias . '.sourceSiteId' => $relCriteria['sourceSite']]
+                                ["$sourcesAlias.sourceSiteId" => null],
+                                ["$sourcesAlias.sourceSiteId" => $relCriteria['sourceSite']]
                             ]);
                         }
 
                         if (!empty($blockTypeFieldIds)) {
-                            $subQuery->andWhere([$sourcesAlias . '.fieldId' => $blockTypeFieldIds]);
+                            $subQuery->andWhere(["$sourcesAlias.fieldId" => $blockTypeFieldIds]);
                         }
                     } else {
                         self::$_relateSourceMatrixBlocksCount++;
@@ -336,26 +334,27 @@ class ElementRelationParamParser extends BaseObject
                         $matrixBlockTargetsAlias = 'matrixblock_targets' . self::$_relateSourceMatrixBlocksCount;
 
                         $subQuery = (new Query())
-                            ->select([$sourceMatrixBlocksAlias . '.ownerId'])
+                            ->select(["$sourceMatrixBlocksAlias.ownerId"])
                             ->from([$sourceMatrixBlocksAlias => Table::MATRIXBLOCKS])
-                            ->innerJoin(Table::ELEMENTS . ' ' . $sourceMatrixElementsAlias, "[[{$sourceMatrixElementsAlias}.id]] = [[{$sourceMatrixBlocksAlias}.id]]")
-                            ->innerJoin(Table::RELATIONS . ' ' . $matrixBlockTargetsAlias, "[[{$matrixBlockTargetsAlias}.sourceId]] = [[{$sourceMatrixBlocksAlias}.id]]")
+                            ->innerJoin([$sourceMatrixElementsAlias => Table::ELEMENTS], "[[{$sourceMatrixElementsAlias}.id]] = [[{$sourceMatrixBlocksAlias}.id]]")
+                            ->innerJoin([$matrixBlockTargetsAlias => Table::RELATIONS], "[[{$matrixBlockTargetsAlias}.sourceId]] = [[{$sourceMatrixBlocksAlias}.id]]")
                             ->where([
-                                $sourceMatrixElementsAlias . '.dateDeleted' => null,
-                                $matrixBlockTargetsAlias . '.targetId' => $relElementIds,
-                                $sourceMatrixBlocksAlias . '.fieldId' => $fieldModel->id
+                                "$sourceMatrixElementsAlias.enabled" => true,
+                                "$sourceMatrixElementsAlias.dateDeleted" => null,
+                                "$matrixBlockTargetsAlias.targetId" => $relElementIds,
+                                "$sourceMatrixBlocksAlias.fieldId" => $fieldModel->id
                             ]);
 
                         if ($relCriteria['sourceSite']) {
                             $subQuery->andWhere([
                                 'or',
-                                [$matrixBlockTargetsAlias . '.sourceSiteId' => null],
-                                [$matrixBlockTargetsAlias . '.sourceSiteId' => $relCriteria['sourceSite']]
+                                ["$matrixBlockTargetsAlias.sourceSiteId" => null],
+                                ["$matrixBlockTargetsAlias.sourceSiteId" => $relCriteria['sourceSite']]
                             ]);
                         }
 
                         if (!empty($blockTypeFieldIds)) {
-                            $subQuery->andWhere([$matrixBlockTargetsAlias . '.fieldId' => $blockTypeFieldIds]);
+                            $subQuery->andWhere(["$matrixBlockTargetsAlias.fieldId" => $blockTypeFieldIds]);
                         }
                     }
 
@@ -385,20 +384,20 @@ class ElementRelationParamParser extends BaseObject
             }
 
             $subQuery = (new Query())
-                ->select([$relTableAlias . '.' . $relElementColumn])
+                ->select(["$relTableAlias.$relElementColumn"])
                 ->from([$relTableAlias => Table::RELATIONS])
-                ->where([$relTableAlias . '.' . $relConditionColumn => $relElementIds]);
+                ->where(["$relTableAlias.$relConditionColumn" => $relElementIds]);
 
             if ($relCriteria['sourceSite']) {
                 $subQuery->andWhere([
                     'or',
-                    [$relTableAlias . '.sourceSiteId' => null],
-                    [$relTableAlias . '.sourceSiteId' => $relCriteria['sourceSite']]
+                    ["$relTableAlias.sourceSiteId" => null],
+                    ["$relTableAlias.sourceSiteId" => $relCriteria['sourceSite']]
                 ]);
             }
 
             if (!empty($relationFieldIds)) {
-                $subQuery->andWhere([$relTableAlias . '.fieldId' => $relationFieldIds]);
+                $subQuery->andWhere(["$relTableAlias.fieldId" => $relationFieldIds]);
             }
 
             $conditions[] = ['elements.id' => $subQuery];
