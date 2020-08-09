@@ -1,0 +1,68 @@
+field: b01498fe-6db2-4b1d-84d2-8cd0cb62f449
+fieldLayouts:
+  3c4c697e-cb6b-4704-bee5-9a2bae9da8f7:
+    tabs:
+      -
+        elements:
+          -
+            fieldUid: aad31ad0-0405-41b5-aff0-4ec567b557a0
+            instructions: null
+            label: null
+            required: '0'
+            tip: null
+            type: craft\fieldlayoutelements\CustomField
+            warning: null
+            width: 100
+          -
+            fieldUid: 0275193a-3c51-46a3-afd0-49e55a93bfd3
+            instructions: null
+            label: null
+            required: '0'
+            tip: null
+            type: craft\fieldlayoutelements\CustomField
+            warning: null
+            width: 100
+        name: Content
+        sortOrder: 1
+fields:
+  0275193a-3c51-46a3-afd0-49e55a93bfd3:
+    contentColumnType: string(1020)
+    fieldGroup: null
+    handle: methodValue
+    instructions: ''
+    name: Value
+    searchable: true
+    settings:
+      byteLimit: null
+      charLimit: 255
+      code: ''
+      columnType: null
+      initialRows: '4'
+      multiline: ''
+      placeholder: ''
+      uiMode: normal
+    translationKeyFormat: null
+    translationMethod: none
+    type: craft\fields\PlainText
+  aad31ad0-0405-41b5-aff0-4ec567b557a0:
+    contentColumnType: string(1020)
+    fieldGroup: null
+    handle: label
+    instructions: ''
+    name: Label
+    searchable: true
+    settings:
+      byteLimit: null
+      charLimit: 255
+      code: ''
+      columnType: null
+      initialRows: '4'
+      multiline: ''
+      placeholder: ''
+      uiMode: normal
+    translationKeyFormat: null
+    translationMethod: none
+    type: craft\fields\PlainText
+handle: contactMethod
+name: 'Contact Method'
+sortOrder: 1
