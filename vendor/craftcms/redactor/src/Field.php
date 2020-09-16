@@ -21,6 +21,7 @@ use craft\helpers\Html;
 use craft\helpers\HtmlPurifier;
 use craft\helpers\Json;
 use craft\helpers\StringHelper;
+use craft\helpers\UrlHelper;
 use craft\models\Section;
 use craft\redactor\assets\field\FieldAsset;
 use craft\redactor\assets\redactor\RedactorAsset;
@@ -207,6 +208,11 @@ class Field extends \craft\base\Field
      */
     public function __construct(array $config = [])
     {
+        // Default showHtmlButtonForNonAdmins to true for existing Assets fields
+        if (isset($config['id']) && !isset($config['showHtmlButtonForNonAdmins'])) {
+            $config['showHtmlButtonForNonAdmins'] = true;
+        }
+
         // normalize a mix/match of ids and uids to a list of uids.
         if (isset($config['availableVolumes']) && is_array($config['availableVolumes'])) {
             $ids = [];
@@ -511,10 +517,10 @@ class Field extends \craft\base\Field
         ]);
 
         return Html::tag('div', $textarea, [
-            'class' => array_filter([
+            'class' => [
                 'redactor',
-                $this->uiMode === 'enlarged' ? 'readable' : null,
-            ]),
+                $this->uiMode,
+            ],
         ]);
     }
 
@@ -647,11 +653,16 @@ class Field extends \craft\base\Field
 
                 if ($query || $hash) {
                     // Make sure that the query/hash isn't actually part of the parsed URL
-                    // (someone's Entry URL Format could include "?slug={slug}" or "#{slug}", etc.)
+                    // - someone's Entry URL Format could include "?slug={slug}" or "#{slug}", etc.
+                    // - assets could include ?mtime=X&focal=none, etc.
                     $parsed = Craft::$app->getElements()->parseRefs("{{$ref}}");
-                    if ($query && mb_strpos($parsed, $query) !== false) {
-                        $url .= $query;
-                        $query = '';
+                    if ($query) {
+                        // Decode any HTML entities, e.g. &amp;
+                        $query = Html::decode($query);
+                        if (mb_strpos($parsed, $query) !== false) {
+                            $url .= $query;
+                            $query = '';
+                        }
                     }
                     if ($hash && mb_strpos($parsed, $hash) !== false) {
                         $url .= $hash;
@@ -688,13 +699,20 @@ class Field extends \craft\base\Field
             return $value;
         }
 
-        return preg_replace_callback('/(href=|src=)([\'"])(\{([\w\\\\]+\:\d+(?:@\d+)?\:(?:transform\:)?' . HandleValidator::$handlePattern . ')(?:\|\|[^\}]+)?\})(#[^\'"#]+)?\2/', function($matches) use ($element) {
+        return preg_replace_callback('/(href=|src=)([\'"])(\{([\w\\\\]+\:\d+(?:@\d+)?\:(?:transform\:)?' . HandleValidator::$handlePattern . ')(?:\|\|[^\}]+)?\})(?:\?([^\'"#]*))?(#[^\'"#]+)?\2/', function($matches) use ($element) {
             /** @var Element|null $element */
-            list ($fullMatch, $attr, $q, $refTag, $ref, $fragment) = array_pad($matches, 6, null);
+            list ($fullMatch, $attr, $q, $refTag, $ref, $query, $fragment) = array_pad($matches, 7, null);
             $parsed = Craft::$app->getElements()->parseRefs($refTag, $element->siteId ?? null);
             // If the ref tag couldn't be parsed, leave it alone
             if ($parsed === $refTag) {
                 return $fullMatch;
+            }
+            if ($query) {
+                // Decode any HTML entities, e.g. &amp;
+                $query = Html::decode($query);
+                if (mb_strpos($parsed, $query) !== false) {
+                    $parsed = UrlHelper::urlWithParams($parsed, $query);
+                }
             }
             return $attr . $q . $parsed . ($fragment ?? '') . '#' . $ref . $q;
         }, $value);

@@ -20,6 +20,7 @@ use craft\fields\Entries as EntryField;
 use craft\fields\Users as UserField;
 use craft\gql\base\ElementResolver;
 use craft\gql\interfaces\elements\Asset as AssetInterface;
+use craft\helpers\Gql as GqlHelper;
 use craft\helpers\StringHelper;
 use craft\services\Gql;
 use GraphQL\Language\AST\ArgumentNode;
@@ -81,12 +82,14 @@ class ElementQueryConditionBuilder extends Component
      */
     public function __construct($config = [])
     {
-        $this->_resolveInfo = $config['resolveInfo'];
+        $this->_resolveInfo = $config['resolveInfo'] ?? null;
         unset($config['resolveInfo']);
 
-        parent::__construct($config);
+        if ($this->_resolveInfo) {
+            $this->_fragments = $this->_resolveInfo->fragments;
+        }
 
-        $this->_fragments = $this->_resolveInfo->fragments;
+        parent::__construct($config);
 
         // Cache all eager-loadable fields by context
         $allFields = Craft::$app->getFields()->getAllFields(false);
@@ -96,6 +99,16 @@ class ElementQueryConditionBuilder extends Component
                 $this->_eagerLoadableFieldsByContext[$field->context][$field->handle] = $field;
             }
         }
+    }
+
+    /**
+     * Set the current ResolveInfo object.
+     *
+     * @param ResolveInfo $resolveInfo
+     */
+    public function setResolveInfo(ResolveInfo $resolveInfo) {
+        $this->_resolveInfo = $resolveInfo;
+        $this->_fragments = $this->_resolveInfo->fragments;
     }
 
     /**
@@ -297,7 +310,6 @@ class ElementQueryConditionBuilder extends Component
         foreach ($directives as $directive) {
             if ($directive->name->value === 'transform') {
                 $arguments = $this->_extractArguments($directive->arguments ?? []);
-                unset($arguments['immediately']);
                 break;
             }
         }
@@ -316,14 +328,7 @@ class ElementQueryConditionBuilder extends Component
             return [];
         }
 
-        // `handle` arguments are just strings on their own.
-        if (!empty($arguments['handle'])) {
-            $arguments += [$arguments['handle']];
-            unset($arguments['handle']);
-        } else {
-            // If there's no handle, then it's a key => value pair that we need to encapsulate.
-            $arguments = [$arguments];
-        }
+        $arguments = [GqlHelper::prepareTransformArguments($arguments)];
 
         return $arguments;
     }
@@ -380,7 +385,7 @@ class ElementQueryConditionBuilder extends Component
                 $transformableAssetProperty = ($rootOfAssetQuery || $parentField) && in_array($nodeName, $this->_transformableAssetProperties, true);
                 $isAssetField = $craftContentField instanceof AssetField;
                 $isSpecialField = $this->_isAdditionalEagerLoadableNode($nodeName, $parentField);
-                $canBeAliased = $isSpecialField && $this->_canSpecialFieldBeAliased($nodeName);
+                $canBeAliased = !$isSpecialField || $this->_canSpecialFieldBeAliased($nodeName);
 
                 // That is a Craft field that can be eager-loaded or is the special `children` property
                 $possibleTransforms = $transformableAssetProperty || $isAssetField;
@@ -539,5 +544,16 @@ class ElementQueryConditionBuilder extends Component
         }
 
         return $eagerLoadNodes;
+    }
+
+    /**
+     * @param string $nodeName
+     * @param null $parentField
+     * @return bool
+     */
+    public function canNodeBeAliased(string $nodeName, $parentField = null)
+    {
+        return !$this->_isAdditionalEagerLoadableNode($nodeName, $parentField) || $this->_canSpecialFieldBeAliased($nodeName);
+
     }
 }

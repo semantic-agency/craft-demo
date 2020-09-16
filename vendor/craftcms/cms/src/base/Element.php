@@ -877,56 +877,70 @@ abstract class Element extends Component implements ElementInterface
                     $selectColumns[] = 'level';
                 }
 
-                $structureData = (new Query())
+                $elementStructureData = (new Query())
                     ->select($selectColumns)
                     ->from([Table::STRUCTUREELEMENTS])
                     ->where(['elementId' => $sourceElementIds])
                     ->all();
 
-                if (empty($structureData)) {
+                if (empty($elementStructureData)) {
                     return null;
                 }
 
-                $qb = Craft::$app->getDb()->getQueryBuilder();
-                $query = new Query();
-                $sourceSelectSql = '(CASE';
+                // Build the descendant condition & params
                 $condition = ['or'];
+                $params = [];
 
-                foreach ($structureData as $i => $elementStructureData) {
+                foreach ($elementStructureData as $i => $elementStructureDatum) {
                     $thisElementCondition = [
                         'and',
-                        ['structureId' => $elementStructureData['structureId']],
-                        ['>', 'lft', $elementStructureData['lft']],
-                        ['<', 'rgt', $elementStructureData['rgt']],
+                        ['structureId' => $elementStructureDatum['structureId']],
+                        ['>', 'lft', $elementStructureDatum['lft']],
+                        ['<', 'rgt', $elementStructureDatum['rgt']],
                     ];
 
                     if ($handle === 'children') {
-                        $thisElementCondition[] = ['level' => $elementStructureData['level'] + 1];
+                        $thisElementCondition[] = ['level' => $elementStructureDatum['level'] + 1];
                     }
 
                     $condition[] = $thisElementCondition;
-                    $sourceSelectSql .= ' WHEN ' .
-                        $qb->buildCondition(
-                            [
-                                'and',
-                                ['structureId' => $elementStructureData['structureId']],
-                                ['>', 'lft', $elementStructureData['lft']],
-                                ['<', 'rgt', $elementStructureData['rgt']]
-                            ],
-                            $query->params) .
-                        " THEN :sourceId{$i}";
-                    $query->params[':sourceId' . $i] = $elementStructureData['elementId'];
+                    $params[":sourceId$i"] = $elementStructureDatum['elementId'];
                 }
 
-                $sourceSelectSql .= ' END) as source';
-
-                // Return any child elements
-                $map = $query
-                    ->select([$sourceSelectSql, 'elementId as target'])
+                // Fetch the descendant data
+                $descendantStructureQuery = (new Query())
+                    ->select(['structureId', 'lft', 'rgt', 'elementId'])
                     ->from([Table::STRUCTUREELEMENTS])
-                    ->where($condition)
-                    ->orderBy(['structureId' => SORT_ASC, 'lft' => SORT_ASC])
-                    ->all();
+                    ->where($condition);
+
+                if ($handle === 'children') {
+                    $descendantStructureQuery->addSelect('level');
+                }
+
+                $descendantStructureData = $descendantStructureQuery->all();
+
+                // Map the elements to their descendants
+                $map = [];
+                foreach ($elementStructureData as $elementStructureDatum) {
+                    foreach ($descendantStructureData as $descendantStructureDatum) {
+                        if (
+                            $descendantStructureDatum['structureId'] === $elementStructureDatum['structureId'] &&
+                            $descendantStructureDatum['lft'] > $elementStructureDatum['lft'] &&
+                            $descendantStructureDatum['rgt'] < $elementStructureDatum['rgt'] &&
+                            (
+                                $handle === 'descendants' ||
+                                $descendantStructureDatum['level'] == $elementStructureDatum['level'] + 1
+                            )
+                        ) {
+                            if ($descendantStructureDatum['elementId']) {
+                                $map[] = [
+                                    'source' => $elementStructureDatum['elementId'],
+                                    'target' => $descendantStructureDatum['elementId'],
+                                ];
+                            }
+                        }
+                    }
+                }
 
                 return [
                     'elementType' => static::class,
@@ -1391,7 +1405,7 @@ abstract class Element extends Component implements ElementInterface
     public function __get($name)
     {
         if ($name === 'locale') {
-            Craft::$app->getDeprecator()->log('Element::locale', 'The “locale” element property has been deprecated. Use “siteId” instead.');
+            Craft::$app->getDeprecator()->log('Element::locale', 'The `locale` element property has been deprecated. Use `siteId` instead.');
 
             return $this->getSite()->handle;
         }
@@ -2108,6 +2122,22 @@ abstract class Element extends Component implements ElementInterface
     /**
      * @inheritdoc
      */
+    public function getHasCheckeredThumb(): bool
+    {
+        return false;
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function getHasRoundedThumb(): bool
+    {
+        return false;
+    }
+
+    /**
+     * @inheritdoc
+     */
     public function getEnabledForSite(int $siteId = null)
     {
         if ($siteId === null) {
@@ -2268,7 +2298,7 @@ abstract class Element extends Component implements ElementInterface
             }
             return ArrayHelper::where($ancestors, function(self $element) use ($dist) {
                 return $element->level >= $this->level - $dist;
-            });
+            }, true, true, false);
         }
 
         return static::find()
@@ -2290,7 +2320,7 @@ abstract class Element extends Component implements ElementInterface
             }
             return ArrayHelper::where($descendants, function(self $element) use ($dist) {
                 return $element->level <= $this->level + $dist;
-            });
+            }, true, true, false);
         }
 
         return static::find()
@@ -3089,7 +3119,7 @@ abstract class Element extends Component implements ElementInterface
             return '';
         }
 
-        $html = Html::hiddenInput('fieldLayoutId', $fieldLayout->id);
+        $html = '';
 
         foreach ($fieldLayout->getTabs() as $tab) {
             foreach ($tab->elements as $element) {
@@ -3098,6 +3128,8 @@ abstract class Element extends Component implements ElementInterface
                 }
             }
         }
+
+        $html .= Html::hiddenInput('fieldLayoutId', $fieldLayout->id);
 
         return $html;
     }
