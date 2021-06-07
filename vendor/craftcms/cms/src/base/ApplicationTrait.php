@@ -21,11 +21,15 @@ use craft\errors\DbConnectException;
 use craft\errors\SiteNotFoundException;
 use craft\errors\WrongEditionException;
 use craft\events\DefineFieldLayoutFieldsEvent;
+use craft\events\DeleteSiteEvent;
 use craft\events\EditionChangeEvent;
+use craft\events\FieldEvent;
+use craft\fieldlayoutelements\AssetTitleField;
 use craft\fieldlayoutelements\EntryTitleField;
 use craft\fieldlayoutelements\TitleField;
 use craft\helpers\App;
 use craft\helpers\Db;
+use craft\helpers\Session;
 use craft\i18n\Formatter;
 use craft\i18n\I18N;
 use craft\i18n\Locale;
@@ -69,10 +73,11 @@ use yii\web\ServerErrorHttpException;
  * @property-read \craft\db\MigrationManager $contentMigrator The content migration manager
  * @property-read \craft\db\MigrationManager $migrator The application’s migration manager
  * @property-read \craft\feeds\Feeds $feeds The feeds service
+ * @property-read \craft\i18n\Locale $formattingLocale The Locale object that should be used to define the formatter
  * @property-read \craft\i18n\Locale $locale The Locale object for the target language
  * @property-read \craft\mail\Mailer $mailer The mailer component
  * @property-read \craft\services\Api $api The API service
- * @property-read \craft\services\AssetIndexer $assetIndexing The asset indexer service
+ * @property-read \craft\services\AssetIndexer $assetIndexer The asset indexer service
  * @property-read \craft\services\Assets $assets The assets service
  * @property-read \craft\services\AssetTransforms $assetTransforms The asset transforms service
  * @property-read \craft\services\Categories $categories The categories service
@@ -227,7 +232,7 @@ trait ApplicationTrait
      */
     public function updateTargetLanguage(bool $useUserLanguage = null)
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         // Defend against an infinite updateTargetLanguage() loop
         if ($this->_gettingLanguage === true) {
             // We tried to get the language, but something went wrong. Use fallback to prevent infinite loop.
@@ -240,7 +245,7 @@ trait ApplicationTrait
         $this->_gettingLanguage = true;
 
         if ($useUserLanguage === null) {
-            /** @var WebRequest|ConsoleRequest $request */
+            /* @var WebRequest|ConsoleRequest $request */
             $request = $this->getRequest();
             $useUserLanguage = $request->getIsConsoleRequest() || $request->getIsCpRequest();
         }
@@ -257,7 +262,7 @@ trait ApplicationTrait
      */
     public function getTargetLanguage(bool $useUserLanguage = true): string
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         // Use the browser language if Craft isn't installed or is updating
         if (!$this->getIsInstalled() || $this->getUpdates()->getIsCraftDbMigrationNeeded()) {
             return $this->_getFallbackLanguage();
@@ -267,7 +272,7 @@ trait ApplicationTrait
             return $this->_getUserLanguage();
         }
 
-        /** @noinspection PhpUnhandledExceptionInspection */
+        /* @noinspection PhpUnhandledExceptionInspection */
         return $this->getSites()->getCurrentSite()->language;
     }
 
@@ -295,8 +300,13 @@ trait ApplicationTrait
         try {
             $info = $this->getInfo(true);
         } catch (DbException $e) {
+            // yii2-redis awkwardly throws yii\db\Exception's rather than their own exception class.
+            if (strpos($e->getMessage(), 'Redis') !== false) {
+                throw $e;
+            }
+
             Craft::error('There was a problem fetching the info row: ' . $e->getMessage(), __METHOD__);
-            /** @var ErrorHandler $errorHandler */
+            /* @var ErrorHandler $errorHandler */
             $errorHandler = $this->getErrorHandler();
             $errorHandler->logException($e);
             return $this->_isInstalled = false;
@@ -312,7 +322,7 @@ trait ApplicationTrait
      */
     public function setIsInstalled($value = true)
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         $this->_isInstalled = $value;
     }
 
@@ -347,7 +357,7 @@ trait ApplicationTrait
      */
     public function getIsMultiSite(bool $refresh = false, bool $withTrashed = false): bool
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         if ($withTrashed) {
             if (!$refresh && $this->_isMultiSiteWithTrashed !== null) {
                 return $this->_isMultiSiteWithTrashed;
@@ -360,7 +370,7 @@ trait ApplicationTrait
                         'x' => (new Query)
                             ->select([new Expression('1')])
                             ->from([Table::SITES])
-                            ->limit(2)
+                            ->limit(2),
                     ])
                     ->count() != 1;
         }
@@ -378,7 +388,7 @@ trait ApplicationTrait
      */
     public function getEdition(): int
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         if ($this->_edition === null) {
             $handle = $this->getProjectConfig()->get('system.edition') ?? 'solo';
             $this->_edition = App::editionIdByHandle($handle);
@@ -393,7 +403,7 @@ trait ApplicationTrait
      */
     public function getEditionName(): string
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return App::editionName($this->getEdition());
     }
 
@@ -404,7 +414,7 @@ trait ApplicationTrait
      */
     public function getLicensedEdition()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         $licensedEdition = $this->getCache()->get('licensedEdition');
 
         if ($licensedEdition !== false) {
@@ -421,7 +431,7 @@ trait ApplicationTrait
      */
     public function getLicensedEditionName()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         $licensedEdition = $this->getLicensedEdition();
 
         if ($licensedEdition !== null) {
@@ -438,7 +448,7 @@ trait ApplicationTrait
      */
     public function getHasWrongEdition(): bool
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         $licensedEdition = $this->getLicensedEdition();
 
         return ($licensedEdition !== null && $licensedEdition !== $this->getEdition() && !$this->getCanTestEditions());
@@ -452,18 +462,18 @@ trait ApplicationTrait
      */
     public function setEdition(int $edition): bool
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         $oldEdition = $this->getEdition();
         $this->getProjectConfig()->set('system.edition', App::editionHandle($edition), "Craft CMS edition change");
         $this->_edition = $edition;
 
         // Fire an 'afterEditionChange' event
-        /** @var WebRequest|ConsoleRequest $request */
+        /* @var WebRequest|ConsoleRequest $request */
         $request = $this->getRequest();
         if (!$request->getIsConsoleRequest() && $this->hasEventHandlers(WebApplication::EVENT_AFTER_EDITION_CHANGE)) {
             $this->trigger(WebApplication::EVENT_AFTER_EDITION_CHANGE, new EditionChangeEvent([
                 'oldEdition' => $oldEdition,
-                'newEdition' => $edition
+                'newEdition' => $edition,
             ]));
         }
 
@@ -479,7 +489,7 @@ trait ApplicationTrait
      */
     public function requireEdition(int $edition, bool $orBetter = true)
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         if ($this->getIsInstalled() && !$this->getProjectConfig()->getIsApplyingYamlChanges()) {
             $installedEdition = $this->getEdition();
 
@@ -497,7 +507,7 @@ trait ApplicationTrait
      */
     public function getCanUpgradeEdition(): bool
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         // Only admin accounts can upgrade Craft
         if (
             $this->getUser()->getIsAdmin() &&
@@ -523,13 +533,13 @@ trait ApplicationTrait
      */
     public function getCanTestEditions(): bool
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         $request = $this->getRequest();
         if ($request->getIsConsoleRequest()) {
             return false;
         }
 
-        /** @var Cache $cache */
+        /* @var Cache $cache */
         $cache = $this->getCache();
         return $cache->get('editionTestableDomain@' . $request->getHostName());
     }
@@ -541,7 +551,7 @@ trait ApplicationTrait
      */
     public function getSystemUid()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->getInfo()->uid;
     }
 
@@ -553,7 +563,7 @@ trait ApplicationTrait
      */
     public function getIsLive(): bool
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         if (is_bool($live = $this->getConfig()->getGeneral()->isSystemLive)) {
             return $live;
         }
@@ -569,7 +579,7 @@ trait ApplicationTrait
      */
     public function getIsSystemOn(): bool
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->getIsLive();
     }
 
@@ -582,7 +592,7 @@ trait ApplicationTrait
      */
     public function getIsInMaintenanceMode(): bool
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return (bool)$this->getInfo()->maintenance;
     }
 
@@ -595,7 +605,7 @@ trait ApplicationTrait
      */
     public function enableMaintenanceMode(): bool
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->_setMaintenanceMode(true);
     }
 
@@ -608,7 +618,7 @@ trait ApplicationTrait
      */
     public function disableMaintenanceMode(): bool
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->_setMaintenanceMode(false);
     }
 
@@ -622,7 +632,7 @@ trait ApplicationTrait
      */
     public function getInfo(bool $throwException = false): Info
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         if ($this->_info !== null) {
             return $this->_info;
         }
@@ -719,7 +729,7 @@ trait ApplicationTrait
      */
     public function saveInfo(Info $info, array $attributeNames = null): bool
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
 
         if ($attributeNames === null) {
             $attributeNames = ['version', 'schemaVersion', 'maintenance', 'fieldVersion'];
@@ -780,7 +790,7 @@ trait ApplicationTrait
         }
 
         try {
-            $name = $this->getSites()->getPrimarySite()->name;
+            $name = $this->getSites()->getPrimarySite()->getName();
         } catch (SiteNotFoundException $e) {
             $name = null;
         }
@@ -806,7 +816,7 @@ trait ApplicationTrait
      */
     public function getIsDbConnectionValid(): bool
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         $e = null;
         try {
             $this->getDb()->open();
@@ -818,7 +828,7 @@ trait ApplicationTrait
 
         if ($e !== null) {
             Craft::error('There was a problem connecting to the database: ' . $e->getMessage(), __METHOD__);
-            /** @var ErrorHandler $errorHandler */
+            /* @var ErrorHandler $errorHandler */
             $errorHandler = $this->getErrorHandler();
             $errorHandler->logException($e);
             return false;
@@ -837,7 +847,7 @@ trait ApplicationTrait
      */
     public function getApi()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('api');
     }
 
@@ -848,7 +858,7 @@ trait ApplicationTrait
      */
     public function getAssets()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('assets');
     }
 
@@ -859,7 +869,7 @@ trait ApplicationTrait
      */
     public function getAssetIndexer()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('assetIndexer');
     }
 
@@ -870,7 +880,7 @@ trait ApplicationTrait
      */
     public function getAssetTransforms()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('assetTransforms');
     }
 
@@ -881,7 +891,7 @@ trait ApplicationTrait
      */
     public function getCategories()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('categories');
     }
 
@@ -892,7 +902,7 @@ trait ApplicationTrait
      */
     public function getComposer()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('composer');
     }
 
@@ -903,7 +913,7 @@ trait ApplicationTrait
      */
     public function getConfig()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('config');
     }
 
@@ -914,7 +924,7 @@ trait ApplicationTrait
      */
     public function getContent()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('content');
     }
 
@@ -925,7 +935,7 @@ trait ApplicationTrait
      */
     public function getContentMigrator(): MigrationManager
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('contentMigrator');
     }
 
@@ -936,7 +946,7 @@ trait ApplicationTrait
      */
     public function getDashboard()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('dashboard');
     }
 
@@ -947,7 +957,7 @@ trait ApplicationTrait
      */
     public function getDeprecator()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('deprecator');
     }
 
@@ -959,7 +969,7 @@ trait ApplicationTrait
      */
     public function getDrafts()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('drafts');
     }
 
@@ -970,7 +980,7 @@ trait ApplicationTrait
      */
     public function getElementIndexes()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('elementIndexes');
     }
 
@@ -981,7 +991,7 @@ trait ApplicationTrait
      */
     public function getElements()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('elements');
     }
 
@@ -992,7 +1002,7 @@ trait ApplicationTrait
      */
     public function getSystemMessages()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('systemMessages');
     }
 
@@ -1003,7 +1013,7 @@ trait ApplicationTrait
      */
     public function getEntries()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('entries');
     }
 
@@ -1015,7 +1025,7 @@ trait ApplicationTrait
      */
     public function getEntryRevisions()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('entryRevisions');
     }
 
@@ -1027,7 +1037,7 @@ trait ApplicationTrait
      */
     public function getFeeds()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('feeds');
     }
 
@@ -1038,8 +1048,19 @@ trait ApplicationTrait
      */
     public function getFields()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('fields');
+    }
+
+    /**
+     * Returns the locale that should be used to define the formatter.
+     *
+     * @return Locale
+     * @since 3.6.0
+     */
+    public function getFormattingLocale(): Locale
+    {
+        return $this->get('formattingLocale');
     }
 
     /**
@@ -1059,7 +1080,7 @@ trait ApplicationTrait
      */
     public function getGlobals()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('globals');
     }
 
@@ -1071,7 +1092,7 @@ trait ApplicationTrait
      */
     public function getGql()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('gql');
     }
 
@@ -1082,7 +1103,7 @@ trait ApplicationTrait
      */
     public function getImages()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('images');
     }
 
@@ -1093,7 +1114,7 @@ trait ApplicationTrait
      */
     public function getLocale(): Locale
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('locale');
     }
 
@@ -1104,7 +1125,7 @@ trait ApplicationTrait
      */
     public function getMailer()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('mailer');
     }
 
@@ -1115,7 +1136,7 @@ trait ApplicationTrait
      */
     public function getMatrix()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('matrix');
     }
 
@@ -1126,7 +1147,7 @@ trait ApplicationTrait
      */
     public function getMigrator(): MigrationManager
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('migrator');
     }
 
@@ -1137,7 +1158,7 @@ trait ApplicationTrait
      */
     public function getMutex(): Mutex
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('mutex');
     }
 
@@ -1148,7 +1169,7 @@ trait ApplicationTrait
      */
     public function getPath()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('path');
     }
 
@@ -1159,7 +1180,7 @@ trait ApplicationTrait
      */
     public function getPlugins()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('plugins');
     }
 
@@ -1170,7 +1191,7 @@ trait ApplicationTrait
      */
     public function getPluginStore()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('pluginStore');
     }
 
@@ -1181,7 +1202,7 @@ trait ApplicationTrait
      */
     public function getQueue()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('queue');
     }
 
@@ -1192,7 +1213,7 @@ trait ApplicationTrait
      */
     public function getRelations()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('relations');
     }
 
@@ -1204,7 +1225,7 @@ trait ApplicationTrait
      */
     public function getRevisions()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('revisions');
     }
 
@@ -1215,7 +1236,7 @@ trait ApplicationTrait
      */
     public function getRoutes()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('routes');
     }
 
@@ -1226,7 +1247,7 @@ trait ApplicationTrait
      */
     public function getSearch()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('search');
     }
 
@@ -1237,7 +1258,7 @@ trait ApplicationTrait
      */
     public function getSections()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('sections');
     }
 
@@ -1248,7 +1269,7 @@ trait ApplicationTrait
      */
     public function getSites()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('sites');
     }
 
@@ -1259,7 +1280,7 @@ trait ApplicationTrait
      */
     public function getStructures()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('structures');
     }
 
@@ -1270,7 +1291,7 @@ trait ApplicationTrait
      */
     public function getProjectConfig()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('projectConfig');
     }
 
@@ -1281,7 +1302,7 @@ trait ApplicationTrait
      */
     public function getSystemSettings()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('systemSettings');
     }
 
@@ -1292,7 +1313,7 @@ trait ApplicationTrait
      */
     public function getTags()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('tags');
     }
 
@@ -1303,7 +1324,7 @@ trait ApplicationTrait
      */
     public function getTemplateCaches()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('templateCaches');
     }
 
@@ -1314,7 +1335,7 @@ trait ApplicationTrait
      */
     public function getTokens()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('tokens');
     }
 
@@ -1325,7 +1346,7 @@ trait ApplicationTrait
      */
     public function getUpdates()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('updates');
     }
 
@@ -1336,7 +1357,7 @@ trait ApplicationTrait
      */
     public function getUserGroups()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('userGroups');
     }
 
@@ -1347,7 +1368,7 @@ trait ApplicationTrait
      */
     public function getUserPermissions()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('userPermissions');
     }
 
@@ -1358,7 +1379,7 @@ trait ApplicationTrait
      */
     public function getUsers()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('users');
     }
 
@@ -1369,7 +1390,7 @@ trait ApplicationTrait
      */
     public function getUtilities()
     {
-        /** @var \craft\web\Application|\craft\console\Application $this */
+        /* @var \craft\web\Application|\craft\console\Application $this */
         return $this->get('utilities');
     }
 
@@ -1380,7 +1401,7 @@ trait ApplicationTrait
      */
     public function getVolumes()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         return $this->get('volumes');
     }
 
@@ -1391,7 +1412,7 @@ trait ApplicationTrait
     {
         // Load the request before anything else, so everything else can safely check Craft::$app->has('request', true)
         // to avoid possible recursive fatal errors in the request initialization
-        $this->getRequest();
+        $request = $this->getRequest();
         $this->getLog();
 
         // Set the timezone
@@ -1399,6 +1420,11 @@ trait ApplicationTrait
 
         // Set the language
         $this->updateTargetLanguage();
+
+        // Prevent browser caching if this is a control panel request
+        if ($request->getIsCpRequest()) {
+            $this->getResponse()->setNoCacheHeaders();
+        }
     }
 
     /**
@@ -1433,7 +1459,7 @@ trait ApplicationTrait
      */
     private function _setTimeZone()
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         $timezone = $this->getConfig()->getGeneral()->timezone;
 
         if (!$timezone) {
@@ -1453,7 +1479,7 @@ trait ApplicationTrait
      */
     private function _setMaintenanceMode(bool $value): bool
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         $info = $this->getInfo();
         if ((bool)$info->maintenance === $value) {
             return true;
@@ -1469,13 +1495,16 @@ trait ApplicationTrait
      */
     private function _getUserLanguage(): string
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         // If the user is logged in *and* has a primary language set, use that
         if ($this instanceof WebApplication) {
             // Don't actually try to fetch the user, as plugins haven't been loaded yet.
-            $session = $this->getSession();
-            $id = $session->getHasSessionId() || $session->getIsActive() ? $session->get($this->getUser()->idParam) : null;
-            if ($id && ($language = $this->getUsers()->getUserPreference($id, 'language')) !== null) {
+            $id = Session::get($this->getUser()->idParam);
+            if (
+                $id &&
+                ($language = $this->getUsers()->getUserPreference($id, 'language')) !== null &&
+                Craft::$app->getI18n()->validateAppLocaleId($language)
+            ) {
                 return $language;
             }
         }
@@ -1493,7 +1522,7 @@ trait ApplicationTrait
      */
     private function _getFallbackLanguage(): string
     {
-        /** @var WebApplication|ConsoleApplication $this */
+        /* @var WebApplication|ConsoleApplication $this */
         // See if we have the CP translated in one of the user's browsers preferred language(s)
         if ($this instanceof WebApplication) {
             $languages = $this->getI18n()->getAppLocaleIds();
@@ -1510,11 +1539,13 @@ trait ApplicationTrait
     private function _registerFieldLayoutListener()
     {
         Event::on(FieldLayout::class, FieldLayout::EVENT_DEFINE_STANDARD_FIELDS, function(DefineFieldLayoutFieldsEvent $event) {
-            /** @var FieldLayout $fieldLayout */
+            /* @var FieldLayout $fieldLayout */
             $fieldLayout = $event->sender;
 
             switch ($fieldLayout->type) {
                 case Asset::class:
+                    $event->fields[] = AssetTitleField::class;
+                    break;
                 case Category::class:
                     $event->fields[] = TitleField::class;
                     break;
@@ -1530,131 +1561,107 @@ trait ApplicationTrait
      */
     private function _registerConfigListeners()
     {
-        $projectConfigService = $this->getProjectConfig();
+        $this->getProjectConfig()
+            // Field groups
+            ->onAdd(Fields::CONFIG_FIELDGROUP_KEY . '.{uid}', $this->_proxy('fields', 'handleChangedGroup'))
+            ->onUpdate(Fields::CONFIG_FIELDGROUP_KEY . '.{uid}', $this->_proxy('fields', 'handleChangedGroup'))
+            ->onRemove(Fields::CONFIG_FIELDGROUP_KEY . '.{uid}', $this->_proxy('fields', 'handleDeletedGroup'))
+            // Fields
+            ->onAdd(Fields::CONFIG_FIELDS_KEY . '.{uid}', $this->_proxy('fields', 'handleChangedField'))
+            ->onUpdate(Fields::CONFIG_FIELDS_KEY . '.{uid}', $this->_proxy('fields', 'handleChangedField'))
+            ->onRemove(Fields::CONFIG_FIELDS_KEY . '.{uid}', $this->_proxy('fields', 'handleDeletedField'))
+            // Block types
+            ->onAdd(Matrix::CONFIG_BLOCKTYPE_KEY . '.{uid}', $this->_proxy('matrix', 'handleChangedBlockType'))
+            ->onUpdate(Matrix::CONFIG_BLOCKTYPE_KEY . '.{uid}', $this->_proxy('matrix', 'handleChangedBlockType'))
+            ->onRemove(Matrix::CONFIG_BLOCKTYPE_KEY . '.{uid}', $this->_proxy('matrix', 'handleDeletedBlockType'))
+            // Volumes
+            ->onAdd(Volumes::CONFIG_VOLUME_KEY . '.{uid}', $this->_proxy('volumes', 'handleChangedVolume'))
+            ->onUpdate(Volumes::CONFIG_VOLUME_KEY . '.{uid}', $this->_proxy('volumes', 'handleChangedVolume'))
+            ->onRemove(Volumes::CONFIG_VOLUME_KEY . '.{uid}', $this->_proxy('volumes', 'handleDeletedVolume'))
+            // Transforms
+            ->onAdd(AssetTransforms::CONFIG_TRANSFORM_KEY . '.{uid}', $this->_proxy('assetTransforms', 'handleChangedTransform'))
+            ->onUpdate(AssetTransforms::CONFIG_TRANSFORM_KEY . '.{uid}', $this->_proxy('assetTransforms', 'handleChangedTransform'))
+            ->onRemove(AssetTransforms::CONFIG_TRANSFORM_KEY . '.{uid}', $this->_proxy('assetTransforms', 'handleDeletedTransform'))
+            // Site groups
+            ->onAdd(Sites::CONFIG_SITEGROUP_KEY . '.{uid}', $this->_proxy('sites', 'handleChangedGroup'))
+            ->onUpdate(Sites::CONFIG_SITEGROUP_KEY . '.{uid}', $this->_proxy('sites', 'handleChangedGroup'))
+            ->onRemove(Sites::CONFIG_SITEGROUP_KEY . '.{uid}', $this->_proxy('sites', 'handleDeletedGroup'))
+            // Sites
+            ->onAdd(Sites::CONFIG_SITES_KEY . '.{uid}', $this->_proxy('sites', 'handleChangedSite'))
+            ->onUpdate(Sites::CONFIG_SITES_KEY . '.{uid}', $this->_proxy('sites', 'handleChangedSite'))
+            ->onRemove(Sites::CONFIG_SITES_KEY . '.{uid}', $this->_proxy('sites', 'handleDeletedSite'))
+            // Tags
+            ->onAdd(Tags::CONFIG_TAGGROUP_KEY . '.{uid}', $this->_proxy('tags', 'handleChangedTagGroup'))
+            ->onUpdate(Tags::CONFIG_TAGGROUP_KEY . '.{uid}', $this->_proxy('tags', 'handleChangedTagGroup'))
+            ->onRemove(Tags::CONFIG_TAGGROUP_KEY . '.{uid}', $this->_proxy('tags', 'handleDeletedTagGroup'))
+            // Categories
+            ->onAdd(Categories::CONFIG_CATEGORYROUP_KEY . '.{uid}', $this->_proxy('categories', 'handleChangedCategoryGroup'))
+            ->onUpdate(Categories::CONFIG_CATEGORYROUP_KEY . '.{uid}', $this->_proxy('categories', 'handleChangedCategoryGroup'))
+            ->onRemove(Categories::CONFIG_CATEGORYROUP_KEY . '.{uid}', $this->_proxy('categories', 'handleDeletedCategoryGroup'))
+            // User group permissions
+            ->onAdd(UserGroups::CONFIG_USERPGROUPS_KEY . '.{uid}.permissions', $this->_proxy('userPermissions', 'handleChangedGroupPermissions'))
+            ->onUpdate(UserGroups::CONFIG_USERPGROUPS_KEY . '.{uid}.permissions', $this->_proxy('userPermissions', 'handleChangedGroupPermissions'))
+            ->onRemove(UserGroups::CONFIG_USERPGROUPS_KEY . '.{uid}.permissions', $this->_proxy('userPermissions', 'handleChangedGroupPermissions'))
+            // User groups
+            ->onAdd(UserGroups::CONFIG_USERPGROUPS_KEY . '.{uid}', $this->_proxy('userGroups', 'handleChangedUserGroup'))
+            ->onUpdate(UserGroups::CONFIG_USERPGROUPS_KEY . '.{uid}', $this->_proxy('userGroups', 'handleChangedUserGroup'))
+            ->onRemove(UserGroups::CONFIG_USERPGROUPS_KEY . '.{uid}', $this->_proxy('userGroups', 'handleDeletedUserGroup'))
+            // User field layout
+            ->onAdd(Users::CONFIG_USERLAYOUT_KEY, $this->_proxy('users', 'handleChangedUserFieldLayout'))
+            ->onUpdate(Users::CONFIG_USERLAYOUT_KEY, $this->_proxy('users', 'handleChangedUserFieldLayout'))
+            ->onRemove(Users::CONFIG_USERLAYOUT_KEY, $this->_proxy('users', 'handleChangedUserFieldLayout'))
+            // Global sets
+            ->onAdd(Globals::CONFIG_GLOBALSETS_KEY . '.{uid}', $this->_proxy('globals', 'handleChangedGlobalSet'))
+            ->onUpdate(Globals::CONFIG_GLOBALSETS_KEY . '.{uid}', $this->_proxy('globals', 'handleChangedGlobalSet'))
+            ->onRemove(Globals::CONFIG_GLOBALSETS_KEY . '.{uid}', $this->_proxy('globals', 'handleDeletedGlobalSet'))
+            // Sections
+            ->onAdd(Sections::CONFIG_SECTIONS_KEY . '.{uid}', $this->_proxy('sections', 'handleChangedSection'))
+            ->onUpdate(Sections::CONFIG_SECTIONS_KEY . '.{uid}', $this->_proxy('sections', 'handleChangedSection'))
+            ->onRemove(Sections::CONFIG_SECTIONS_KEY . '.{uid}', $this->_proxy('sections', 'handleDeletedSection'))
+            // Entry types
+            ->onAdd(Sections::CONFIG_ENTRYTYPES_KEY . '.{uid}', $this->_proxy('sections', 'handleChangedEntryType'))
+            ->onUpdate(Sections::CONFIG_ENTRYTYPES_KEY . '.{uid}', $this->_proxy('sections', 'handleChangedEntryType'))
+            ->onRemove(Sections::CONFIG_ENTRYTYPES_KEY . '.{uid}', $this->_proxy('sections', 'handleDeletedEntryType'))
+            // GraphQL schemas
+            ->onAdd(Gql::CONFIG_GQL_SCHEMAS_KEY . '.{uid}', $this->_proxy('gql', 'handleChangedSchema'))
+            ->onUpdate(Gql::CONFIG_GQL_SCHEMAS_KEY . '.{uid}', $this->_proxy('gql', 'handleChangedSchema'))
+            ->onRemove(Gql::CONFIG_GQL_SCHEMAS_KEY . '.{uid}', $this->_proxy('gql', 'handleDeletedSchema'))
+            // GraphQL public token
+            ->onAdd(Gql::CONFIG_GQL_PUBLIC_TOKEN_KEY, $this->_proxy('gql', 'handleChangedPublicToken'))
+            ->onUpdate(Gql::CONFIG_GQL_PUBLIC_TOKEN_KEY, $this->_proxy('gql', 'handleChangedPublicToken'));
 
-        // Field groups
-        $fieldsService = $this->getFields();
-        $projectConfigService
-            ->onAdd(Fields::CONFIG_FIELDGROUP_KEY . '.{uid}', [$fieldsService, 'handleChangedGroup'])
-            ->onUpdate(Fields::CONFIG_FIELDGROUP_KEY . '.{uid}', [$fieldsService, 'handleChangedGroup'])
-            ->onRemove(Fields::CONFIG_FIELDGROUP_KEY . '.{uid}', [$fieldsService, 'handleDeletedGroup']);
+        // Prune deleted fields from their layouts
+        Event::on(Fields::class, Fields::EVENT_AFTER_DELETE_FIELD, function(FieldEvent $event) {
+            $this->getVolumes()->pruneDeletedField($event);
+            $this->getTags()->pruneDeletedField($event);
+            $this->getCategories()->pruneDeletedField($event);
+            $this->getUsers()->pruneDeletedField($event);
+            $this->getGlobals()->pruneDeletedField($event);
+            $this->getSections()->pruneDeletedField($event);
+        });
 
-        // Fields
-        $projectConfigService
-            ->onAdd(Fields::CONFIG_FIELDS_KEY . '.{uid}', [$fieldsService, 'handleChangedField'])
-            ->onUpdate(Fields::CONFIG_FIELDS_KEY . '.{uid}', [$fieldsService, 'handleChangedField'])
-            ->onRemove(Fields::CONFIG_FIELDS_KEY . '.{uid}', [$fieldsService, 'handleDeletedField']);
+        // Prune deleted sites from site settings
+        Event::on(Sites::class, Sites::EVENT_AFTER_DELETE_SITE, function(DeleteSiteEvent $event) {
+            $this->getRoutes()->handleDeletedSite($event);
+            $this->getCategories()->pruneDeletedSite($event);
+            $this->getSections()->pruneDeletedSite($event);
+        });
+    }
 
-        // Block types
-        $matrixService = $this->getMatrix();
-        $projectConfigService
-            ->onAdd(Matrix::CONFIG_BLOCKTYPE_KEY . '.{uid}', [$matrixService, 'handleChangedBlockType'])
-            ->onUpdate(Matrix::CONFIG_BLOCKTYPE_KEY . '.{uid}', [$matrixService, 'handleChangedBlockType'])
-            ->onRemove(Matrix::CONFIG_BLOCKTYPE_KEY . '.{uid}', [$matrixService, 'handleDeletedBlockType']);
-
-        // Volumes
-        $volumesService = $this->getVolumes();
-        $projectConfigService
-            ->onAdd(Volumes::CONFIG_VOLUME_KEY . '.{uid}', [$volumesService, 'handleChangedVolume'])
-            ->onUpdate(Volumes::CONFIG_VOLUME_KEY . '.{uid}', [$volumesService, 'handleChangedVolume'])
-            ->onRemove(Volumes::CONFIG_VOLUME_KEY . '.{uid}', [$volumesService, 'handleDeletedVolume']);
-        Event::on(Fields::class, Fields::EVENT_AFTER_DELETE_FIELD, [$volumesService, 'pruneDeletedField']);
-
-        // Transforms
-        $transformService = $this->getAssetTransforms();
-        $projectConfigService
-            ->onAdd(AssetTransforms::CONFIG_TRANSFORM_KEY . '.{uid}', [$transformService, 'handleChangedTransform'])
-            ->onUpdate(AssetTransforms::CONFIG_TRANSFORM_KEY . '.{uid}', [$transformService, 'handleChangedTransform'])
-            ->onRemove(AssetTransforms::CONFIG_TRANSFORM_KEY . '.{uid}', [$transformService, 'handleDeletedTransform']);
-
-        // Site groups
-        $sitesService = $this->getSites();
-        $projectConfigService
-            ->onAdd(Sites::CONFIG_SITEGROUP_KEY . '.{uid}', [$sitesService, 'handleChangedGroup'])
-            ->onUpdate(Sites::CONFIG_SITEGROUP_KEY . '.{uid}', [$sitesService, 'handleChangedGroup'])
-            ->onRemove(Sites::CONFIG_SITEGROUP_KEY . '.{uid}', [$sitesService, 'handleDeletedGroup']);
-
-        // Sites
-        $projectConfigService
-            ->onAdd(Sites::CONFIG_SITES_KEY . '.{uid}', [$sitesService, 'handleChangedSite'])
-            ->onUpdate(Sites::CONFIG_SITES_KEY . '.{uid}', [$sitesService, 'handleChangedSite'])
-            ->onRemove(Sites::CONFIG_SITES_KEY . '.{uid}', [$sitesService, 'handleDeletedSite']);
-
-        // Routes
-        Event::on(Sites::class, Sites::EVENT_AFTER_DELETE_SITE, [Craft::$app->getRoutes(), 'handleDeletedSite']);
-
-        // Tags
-        $tagsService = $this->getTags();
-        $projectConfigService
-            ->onAdd(Tags::CONFIG_TAGGROUP_KEY . '.{uid}', [$tagsService, 'handleChangedTagGroup'])
-            ->onUpdate(Tags::CONFIG_TAGGROUP_KEY . '.{uid}', [$tagsService, 'handleChangedTagGroup'])
-            ->onRemove(Tags::CONFIG_TAGGROUP_KEY . '.{uid}', [$tagsService, 'handleDeletedTagGroup']);
-        Event::on(Fields::class, Fields::EVENT_AFTER_DELETE_FIELD, [$tagsService, 'pruneDeletedField']);
-
-        // Categories
-        $categoriesService = $this->getCategories();
-        $projectConfigService
-            ->onAdd(Categories::CONFIG_CATEGORYROUP_KEY . '.{uid}', [$categoriesService, 'handleChangedCategoryGroup'])
-            ->onUpdate(Categories::CONFIG_CATEGORYROUP_KEY . '.{uid}', [$categoriesService, 'handleChangedCategoryGroup'])
-            ->onRemove(Categories::CONFIG_CATEGORYROUP_KEY . '.{uid}', [$categoriesService, 'handleDeletedCategoryGroup']);
-        Event::on(Fields::class, Fields::EVENT_AFTER_DELETE_FIELD, [$categoriesService, 'pruneDeletedField']);
-        Event::on(Sites::class, Sites::EVENT_AFTER_DELETE_SITE, [$categoriesService, 'pruneDeletedSite']);
-
-        // User group permissions
-        $userPermissionsService = $this->getUserPermissions();
-        $projectConfigService
-            ->onAdd(UserGroups::CONFIG_USERPGROUPS_KEY . '.{uid}.permissions', [$userPermissionsService, 'handleChangedGroupPermissions'])
-            ->onUpdate(UserGroups::CONFIG_USERPGROUPS_KEY . '.{uid}.permissions', [$userPermissionsService, 'handleChangedGroupPermissions'])
-            ->onRemove(UserGroups::CONFIG_USERPGROUPS_KEY . '.{uid}.permissions', [$userPermissionsService, 'handleChangedGroupPermissions']);
-
-        // User groups
-        $userGroupsService = $this->getUserGroups();
-        $projectConfigService
-            ->onAdd(UserGroups::CONFIG_USERPGROUPS_KEY . '.{uid}', [$userGroupsService, 'handleChangedUserGroup'])
-            ->onUpdate(UserGroups::CONFIG_USERPGROUPS_KEY . '.{uid}', [$userGroupsService, 'handleChangedUserGroup'])
-            ->onRemove(UserGroups::CONFIG_USERPGROUPS_KEY . '.{uid}', [$userGroupsService, 'handleDeletedUserGroup']);
-
-        // User field layout
-        $usersService = $this->getUsers();
-        $projectConfigService
-            ->onAdd(Users::CONFIG_USERLAYOUT_KEY, [$usersService, 'handleChangedUserFieldLayout'])
-            ->onUpdate(Users::CONFIG_USERLAYOUT_KEY, [$usersService, 'handleChangedUserFieldLayout'])
-            ->onRemove(Users::CONFIG_USERLAYOUT_KEY, [$usersService, 'handleChangedUserFieldLayout']);
-        Event::on(Fields::class, Fields::EVENT_AFTER_DELETE_FIELD, [$usersService, 'pruneDeletedField']);
-
-        // Global sets
-        $globalsService = $this->getGlobals();
-        $projectConfigService
-            ->onAdd(Globals::CONFIG_GLOBALSETS_KEY . '.{uid}', [$globalsService, 'handleChangedGlobalSet'])
-            ->onUpdate(Globals::CONFIG_GLOBALSETS_KEY . '.{uid}', [$globalsService, 'handleChangedGlobalSet'])
-            ->onRemove(Globals::CONFIG_GLOBALSETS_KEY . '.{uid}', [$globalsService, 'handleDeletedGlobalSet']);
-        Event::on(Fields::class, Fields::EVENT_AFTER_DELETE_FIELD, [$globalsService, 'pruneDeletedField']);
-
-        // Sections
-        $sectionsService = $this->getSections();
-        $projectConfigService
-            ->onAdd(Sections::CONFIG_SECTIONS_KEY . '.{uid}', [$sectionsService, 'handleChangedSection'])
-            ->onUpdate(Sections::CONFIG_SECTIONS_KEY . '.{uid}', [$sectionsService, 'handleChangedSection'])
-            ->onRemove(Sections::CONFIG_SECTIONS_KEY . '.{uid}', [$sectionsService, 'handleDeletedSection']);
-        Event::on(Sites::class, Sites::EVENT_AFTER_DELETE_SITE, [$sectionsService, 'pruneDeletedSite']);
-
-        // Entry types
-        $projectConfigService
-            ->onAdd(Sections::CONFIG_ENTRYTYPES_KEY . '.{uid}', [$sectionsService, 'handleChangedEntryType'])
-            ->onUpdate(Sections::CONFIG_ENTRYTYPES_KEY . '.{uid}', [$sectionsService, 'handleChangedEntryType'])
-            ->onRemove(Sections::CONFIG_ENTRYTYPES_KEY . '.{uid}', [$sectionsService, 'handleDeletedEntryType']);
-        Event::on(Fields::class, Fields::EVENT_AFTER_DELETE_FIELD, [$sectionsService, 'pruneDeletedField']);
-
-        // GraphQL schemas
-        $gqlService = $this->getGql();
-        $projectConfigService
-            ->onAdd(Gql::CONFIG_GQL_SCHEMAS_KEY . '.{uid}', [$gqlService, 'handleChangedSchema'])
-            ->onUpdate(Gql::CONFIG_GQL_SCHEMAS_KEY . '.{uid}', [$gqlService, 'handleChangedSchema'])
-            ->onRemove(Gql::CONFIG_GQL_SCHEMAS_KEY . '.{uid}', [$gqlService, 'handleDeletedSchema']);
-
-        // GraphQL public token
-        $projectConfigService
-            ->onAdd(Gql::CONFIG_GQL_PUBLIC_TOKEN_KEY, [$gqlService, 'handleChangedPublicToken'])
-            ->onUpdate(Gql::CONFIG_GQL_PUBLIC_TOKEN_KEY, [$gqlService, 'handleChangedPublicToken']);
+    /**
+     * Returns a proxy function for calling a component method, based on its ID.
+     *
+     * The component won’t be fetched until the method is called, avoiding unnecessary component instantiation, and ensuring the correct component
+     * is called if it happens to get swapped out (e.g. for a test).
+     *
+     * @param string $id The component ID
+     * @param string $method The method name
+     * @return callable
+     */
+    private function _proxy(string $id, string $method): callable
+    {
+        return function() use ($id, $method) {
+            return $this->get($id)->$method(...func_get_args());
+        };
     }
 }

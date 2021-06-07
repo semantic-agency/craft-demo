@@ -8,23 +8,18 @@
 namespace craft\web;
 
 use Craft;
-use craft\base\ElementInterface;
 use craft\events\RegisterTemplateRootsEvent;
 use craft\events\TemplateEvent;
 use craft\helpers\Cp;
-use craft\helpers\ElementHelper;
 use craft\helpers\FileHelper;
 use craft\helpers\Html;
 use craft\helpers\Json;
 use craft\helpers\Path;
 use craft\helpers\StringHelper;
-use craft\helpers\UrlHelper;
 use craft\web\twig\Environment;
 use craft\web\twig\Extension;
 use craft\web\twig\Template;
 use craft\web\twig\TemplateLoader;
-use JSMin\JSMin;
-use Minify_CSSmin;
 use Twig\Error\LoaderError as TwigLoaderError;
 use Twig\Error\RuntimeError as TwigRuntimeError;
 use Twig\Error\SyntaxError as TwigSyntaxError;
@@ -101,12 +96,14 @@ class View extends \yii\web\View
     /**
      * @var bool Whether to minify CSS registered with [[registerCss()]]
      * @since 3.4.0
+     * @deprecated in 3.6.0.
      */
     public $minifyCss = false;
 
     /**
      * @var bool Whether to minify JS registered with [[registerJs()]]
      * @since 3.4.0
+     * @deprecated in 3.6.0
      */
     public $minifyJs = false;
 
@@ -315,7 +312,7 @@ class View extends \yii\web\View
         }
 
         // Set our timezone
-        /** @var CoreExtension $core */
+        /* @var CoreExtension $core */
         $core = $twig->getExtension(CoreExtension::class);
         $core->setTimezone(Craft::$app->getTimeZone());
 
@@ -481,6 +478,7 @@ class View extends \yii\web\View
      * @throws TwigRuntimeError
      * @throws TwigSyntaxError
      * @throws Exception if $templateMode is invalid
+     * @deprecated in 3.6.0.
      */
     public function renderTemplateMacro(string $template, string $macro, array $args = [], string $templateMode = null): string
     {
@@ -635,7 +633,7 @@ class View extends \yii\web\View
             $variables['_variables'] = $variables;
 
             // Render it!
-            /** @var TwigTemplate $templateObj */
+            /* @var TwigTemplate $templateObj */
             $templateObj = $this->_objectTemplates[$cacheKey];
             $output = $templateObj->render($variables);
         } catch (\Throwable $e) {
@@ -869,7 +867,7 @@ class View extends \yii\web\View
 
         // Should we be looking for a localized version of the template?
         if ($this->_templateMode === self::TEMPLATE_MODE_SITE && Craft::$app->getIsInstalled()) {
-            /** @noinspection PhpUnhandledExceptionInspection */
+            /* @noinspection PhpUnhandledExceptionInspection */
             $sitePath = $this->_templatesPath . DIRECTORY_SEPARATOR . Craft::$app->getSites()->getCurrentSite()->handle;
             if (is_dir($sitePath)) {
                 $basePaths[] = $sitePath;
@@ -895,7 +893,7 @@ class View extends \yii\web\View
 
         if (!empty($roots)) {
             foreach ($roots as $templateRoot => $basePaths) {
-                /** @var string[] $basePaths */
+                /* @var string[] $basePaths */
                 $templateRootLen = strlen($templateRoot);
                 if ($templateRoot === '' || strncasecmp($templateRoot . '/', $name . '/', $templateRootLen + 1) === 0) {
                     $subName = $templateRoot === '' ? $name : (strlen($name) === $templateRootLen ? '' : substr($name, $templateRootLen + 1));
@@ -932,24 +930,6 @@ class View extends \yii\web\View
     }
 
     /**
-     * @inheritdoc
-     * @since 3.4.0
-     */
-    public function registerCss($css, $options = [], $key = null)
-    {
-        if ($this->minifyCss) {
-            // Sanity check to work around https://github.com/tubalmartin/YUI-CSS-compressor-PHP-port/issues/58
-            if (preg_match('/\{[^\}]*$/', $css, $matches, PREG_OFFSET_CAPTURE)) {
-                Craft::warning("Unable to minify CSS due to an unclosed CSS block at offset {$matches[0][1]}.", __METHOD__);
-            } else {
-                $css = Minify_CSSmin::minify($css);
-            }
-        }
-
-        parent::registerCss($css, $options, $key);
-    }
-
-    /**
      * Registers a hi-res CSS code block.
      *
      * @param string $css the CSS code block to be registered
@@ -981,10 +961,6 @@ class View extends \yii\web\View
     {
         // Trim any whitespace and ensure it ends with a semicolon.
         $js = StringHelper::ensureRight(trim($js, " \t\n\r\0\x0B"), ';');
-
-        if ($this->minifyJs) {
-            $js = JSMin::minify($js);
-        }
 
         parent::registerJs($js, $position, $key);
     }
@@ -1349,7 +1325,7 @@ JS;
         // Validate
         if (!in_array($templateMode, [
             self::TEMPLATE_MODE_CP,
-            self::TEMPLATE_MODE_SITE
+            self::TEMPLATE_MODE_SITE,
         ], true)
         ) {
             throw new Exception('"' . $templateMode . '" is not a valid template mode');
@@ -1544,17 +1520,34 @@ JS;
      * {% hook "myAwesomeHook" %}
      * ```
      *
-     * When the hook tag gets invoked, your template hook function will get called. The $context argument will be the
+     * When the hook tag gets invoked, your template hook function will get called. The `$context` argument will be the
      * current Twig context array, which you’re free to manipulate. Any changes you make to it will be available to the
      * template following the tag. Whatever your template hook function returns will be output in place of the tag in
      * the template as well.
      *
+     * If you want to prevent additional hook methods from getting triggered, add a second `$handled` argument to your callback method,
+     * which should be passed by reference, and then set it to `true` within the method.
+     *
+     * ```php
+     * Craft::$app->view->hook('myAwesomeHook', function(&$context, &$handled) {
+     *     $context['foo'] = 'bar';
+     *     $handled = true;
+     *     return 'Hey!';
+     * });
+     * ```
+     *
      * @param string $hook The hook name.
      * @param callback $method The callback function.
+     * @param bool $append whether to append the method handler to the end of the existing method list for the hook. If `false`, the method will be
+     * inserted at the beginning of the existing method list.
      */
-    public function hook(string $hook, $method)
+    public function hook(string $hook, $method, bool $append = true)
     {
-        $this->_hooks[$hook][] = $method;
+        if ($append || empty($this->_hooks[$hook])) {
+            $this->_hooks[$hook][] = $method;
+        } else {
+            array_unshift($this->_hooks[$hook], $method);
+        }
     }
 
     /**
@@ -1571,8 +1564,12 @@ JS;
         $return = '';
 
         if (isset($this->_hooks[$hook])) {
+            $handled = false;
             foreach ($this->_hooks[$hook] as $method) {
-                $return .= $method($context);
+                $return .= $method($context, $handled);
+                if ($handled) {
+                    break;
+                }
             }
         }
 
@@ -1794,8 +1791,8 @@ JS;
             return;
         }
 
+        // Explicitly check if the session is active here, in case the session was closed.
         $session = Craft::$app->getSession();
-
         if ($session->getIsActive()) {
             foreach ($session->getAssetBundleFlashes(true) as $name => $position) {
                 if (!is_subclass_of($name, YiiAssetBundle::class)) {
@@ -1805,7 +1802,7 @@ JS;
                 $this->registerAssetBundle($name, $position);
             }
 
-            foreach ($session->getJsFlashes(true) as list($js, $position, $key)) {
+            foreach ($session->getJsFlashes(true) as [$js, $position, $key]) {
                 $this->registerJs($js, $position, $key);
             }
         }

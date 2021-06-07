@@ -11,6 +11,7 @@ use Composer\Package\CompletePackageInterface;
 use Composer\Package\PackageInterface;
 use Composer\Repository\InstalledRepositoryInterface;
 use Composer\Util\Filesystem;
+use React\Promise\PromiseInterface;
 
 /**
  * Installer is the Composer installer that installs Craft CMS plugins.
@@ -26,17 +27,27 @@ class Installer extends LibraryInstaller
      */
     public function install(InstalledRepositoryInterface $repo, PackageInterface $package)
     {
-        // Install the plugin in vendor/ like a normal Composer library
-        parent::install($repo, $package);
+        $addPlugin = function() use ($repo, $package) {
+            // Add the plugin info to plugins.php
+            try {
+                $this->addPlugin($package);
+            } catch (InvalidPluginException $e) {
+                // Rollback
+                parent::uninstall($repo, $package);
+                throw $e;
+            }
+        };
 
-        // Add the plugin info to plugins.php
-        try {
-            $this->addPlugin($package);
-        } catch (InvalidPluginException $e) {
-            // Rollback
-            parent::uninstall($repo, $package);
-            throw $e;
+        // Install the plugin in vendor/ like a normal Composer library
+        $promise = parent::install($repo, $package);
+
+        // Composer v2 might return a promise here
+        if ($promise instanceof PromiseInterface) {
+            return $promise->then($addPlugin);
         }
+
+        $addPlugin();
+        return null;
     }
 
     /**
@@ -44,23 +55,33 @@ class Installer extends LibraryInstaller
      */
     public function update(InstalledRepositoryInterface $repo, PackageInterface $initial, PackageInterface $target)
     {
-        // Update the plugin in vendor/ like a normal Composer library
-        parent::update($repo, $initial, $target);
+        $updatePlugin = function() use ($repo, $initial, $target) {
+            // Remove the old plugin info from plugins.php
+            $initialPlugin = $this->removePlugin($initial);
 
-        // Remove the old plugin info from plugins.php
-        $initialPlugin = $this->removePlugin($initial);
-
-        // Add the new plugin info to plugins.php
-        try {
-            $this->addPlugin($target);
-        } catch (InvalidPluginException $e) {
-            // Rollback
-            parent::update($repo, $target, $initial);
-            if ($initialPlugin !== null) {
-                $this->registerPlugin($initial->getName(), $initialPlugin);
+            // Add the new plugin info to plugins.php
+            try {
+                $this->addPlugin($target);
+            } catch (InvalidPluginException $e) {
+                // Rollback
+                parent::update($repo, $target, $initial);
+                if ($initialPlugin !== null) {
+                    $this->registerPlugin($initial->getName(), $initialPlugin);
+                }
+                throw $e;
             }
-            throw $e;
+        };
+
+        // Update the plugin in vendor/ like a normal Composer library
+        $promise = parent::update($repo, $initial, $target);
+
+        // Composer v2 might return a promise here
+        if ($promise instanceof PromiseInterface) {
+            return $promise->then($updatePlugin);
         }
+
+        $updatePlugin();
+        return null;
     }
 
     /**
@@ -68,11 +89,21 @@ class Installer extends LibraryInstaller
      */
     public function uninstall(InstalledRepositoryInterface $repo, PackageInterface $package)
     {
-        // Uninstall the plugin from vendor/ like a normal Composer library
-        parent::uninstall($repo, $package);
+        $removePlugin = function() use ($package) {
+            // Remove the plugin info from plugins.php
+            $this->removePlugin($package);
+        };
 
-        // Remove the plugin info from plugins.php
-        $this->removePlugin($package);
+        // Uninstall the plugin from vendor/ like a normal Composer library
+        $promise = parent::uninstall($repo, $package);
+
+        // Composer v2 might return a promise here
+        if ($promise instanceof PromiseInterface) {
+            return $promise->then($removePlugin);
+        }
+
+        $removePlugin();
+        return null;
     }
 
     /**
@@ -115,11 +146,11 @@ class Installer extends LibraryInstaller
             $this->io->write('<warning>' . $prettyName . ' uses the old plugin handle format ("' . $extra['handle'] . '"). It should be "' . $handle . '".</warning>');
         }
 
-        $plugin = array(
+        $plugin = [
             'class' => $class,
             'basePath' => $basePath,
             'handle' => $handle,
-        );
+        ];
 
         if ($aliases) {
             $plugin['aliases'] = $aliases;
@@ -267,7 +298,7 @@ class Installer extends LibraryInstaller
 
         $fs = new Filesystem();
         $vendorDir = $fs->normalizePath($this->vendorDir);
-        $aliases = array();
+        $aliases = [];
 
         foreach ($autoload['psr-4'] as $namespace => $path) {
             if (is_array($path)) {
@@ -288,13 +319,7 @@ class Installer extends LibraryInstaller
             $path = $fs->normalizePath($path);
             $alias = '@' . str_replace('\\', '/', trim($namespace, '\\'));
 
-            if (strpos($path . '/', $vendorDir . '/') === 0) {
-                $aliases[$alias] = '<vendor-dir>' . substr($path, strlen($vendorDir));
-            } else if (strpos($path . '/', $cwd . '/') === 0) {
-                $aliases[$alias] = '<root-dir>' . substr($path, strlen($cwd));
-            } else {
-                $aliases[$alias] = $path;
-            }
+            $aliases[$alias] = $this->_path($vendorDir, $cwd, $path);
 
             // If we're still looking for the primary Plugin class, see if it's in here
             if ($class === null && file_exists($path . '/Plugin.php')) {
@@ -309,11 +334,7 @@ class Installer extends LibraryInstaller
                 if (strncmp($namespace, $class, $n) === 0) {
                     $testClassPath = $path . '/' . str_replace('\\', '/', substr($class, $n)) . '.php';
                     if (file_exists($testClassPath)) {
-                        $basePath = dirname($testClassPath);
-                        // If the base path starts with the vendor dir path, swap with <vendor-dir>
-                        if (strpos($basePath . '/', $vendorDir . '/') === 0) {
-                            $basePath = '<vendor-dir>' . substr($basePath, strlen($vendorDir));
-                        }
+                        $basePath = $this->_path($vendorDir, $cwd, dirname($testClassPath));
                     }
                 }
             }
@@ -385,7 +406,7 @@ class Installer extends LibraryInstaller
         $file = $this->vendorDir . '/' . static::PLUGINS_FILE;
 
         if (!is_file($file)) {
-            return array();
+            return [];
         }
 
         // Invalidate opcache of plugins.php if it exists
@@ -398,23 +419,17 @@ class Installer extends LibraryInstaller
 
         // Swap absolute paths with <vendor-dir> tags
         $vendorDir = str_replace('\\', '/', $this->vendorDir);
-        $n = strlen($vendorDir);
+        $cwd = getcwd();
 
         foreach ($plugins as &$plugin) {
             // basePath
             if (isset($plugin['basePath'])) {
-                $path = str_replace('\\', '/', $plugin['basePath']);
-                if (strpos($path . '/', $vendorDir . '/') === 0) {
-                    $plugin['basePath'] = '<vendor-dir>' . substr($path, $n);
-                }
+                $plugin['basePath'] = $this->_path($vendorDir, $cwd, $plugin['basePath']);
             }
             // aliases
             if (isset($plugin['aliases'])) {
                 foreach ($plugin['aliases'] as $alias => $path) {
-                    $path = str_replace('\\', '/', $path);
-                    if (strpos($path . '/', $vendorDir . '/') === 0) {
-                        $plugin['aliases'][$alias] = '<vendor-dir>' . substr($path, $n);
-                    }
+                    $plugin['aliases'][$alias] = $this->_path($vendorDir, $cwd, $plugin['aliases'][$alias]);
                 }
             }
         }
@@ -433,7 +448,7 @@ class Installer extends LibraryInstaller
             mkdir(dirname($file), 0777, true);
         }
 
-        $array = str_replace(array("'<vendor-dir>", "'<root-dir>"), array('$vendorDir . \'', '$rootDir . \''), var_export($plugins, true));
+        $array = str_replace(["'<vendor-dir>", "'<root-dir>"], ['$vendorDir . \'', '$rootDir . \''], var_export($plugins, true));
         $fs = new Filesystem();
         file_put_contents($file, "<?php\n\n\$vendorDir = dirname(__DIR__);\n" .
             "\$rootDir = " . $fs->findShortestPathCode($this->vendorDir . '/craftcms', getcwd(), true) . ";\n\n" .
@@ -443,5 +458,25 @@ class Installer extends LibraryInstaller
         if (function_exists('opcache_invalidate')) {
             @opcache_invalidate($file, true);
         }
+    }
+
+    /**
+     * Prepares a path for inclusion in plugins.php.
+     *
+     * @param string $vendorDir The path to the vendor/ folder
+     * @param string $cwd The current working directory
+     * @param string $path The path to be normalized
+     * @return string
+     */
+    private function _path(string $vendorDir, string $cwd, string $path): string
+    {
+        $path = str_replace('\\', '/', $path);
+        if (strpos("$path/", "$vendorDir/") === 0) {
+            return '<vendor-dir>' . substr($path, strlen($vendorDir));
+        }
+        if (strpos("$path/", "$cwd/") === 0) {
+            return '<root-dir>' . substr($path, strlen($cwd));
+        }
+        return $path;
     }
 }

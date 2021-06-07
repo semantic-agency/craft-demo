@@ -21,6 +21,7 @@ use Composer\Package\Version\VersionParser;
 use Composer\Util\Platform;
 use Composer\Util\ProcessExecutor;
 use Composer\Util\Filesystem;
+use Composer\Util\Url;
 use Composer\Util\Git as GitUtil;
 
 /**
@@ -117,6 +118,11 @@ class PathRepository extends ArrayRepository implements ConfigurableRepositoryIn
         parent::__construct();
     }
 
+    public function getRepoName()
+    {
+        return 'path repo ('.Url::sanitize($this->repoConfig['url']).')';
+    }
+
     public function getRepoConfig()
     {
         return $this->repoConfig;
@@ -164,6 +170,12 @@ class PathRepository extends ArrayRepository implements ConfigurableRepositoryIn
                 'reference' => sha1($json . serialize($this->options)),
             );
             $package['transport-options'] = $this->options;
+            unset($package['transport-options']['versions']);
+
+            // use the version provided as option if available
+            if (isset($package['name'], $this->options['versions'][$package['name']])) {
+                $package['version'] = $this->options['versions'][$package['name']];
+            }
 
             // carry over the root package version if this path repo is in the same git repository as root package
             if (!isset($package['version']) && ($rootVersion = getenv('COMPOSER_ROOT_VERSION'))) {

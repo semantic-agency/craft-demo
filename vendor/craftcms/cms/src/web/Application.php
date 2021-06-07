@@ -82,17 +82,6 @@ class Application extends \yii\web\Application
     const EVENT_AFTER_EDITION_CHANGE = 'afterEditionChange';
 
     /**
-     * Constructor.
-     *
-     * @param array $config
-     */
-    public function __construct(array $config = [])
-    {
-        Craft::$app = $this;
-        parent::__construct($config);
-    }
-
-    /**
      * Initializes the application.
      */
     public function init()
@@ -162,11 +151,20 @@ class Application extends \yii\web\Application
         // Process resource requests before anything else
         $this->_processResourceRequest($request);
 
+        // Disable read/write splitting for POST requests
+        if ($this->getRequest()->getIsPost()) {
+            $this->getDb()->enableReplicas = false;
+        }
+
         $headers = $this->getResponse()->getHeaders();
         $generalConfig = $this->getConfig()->getGeneral();
 
+        if ($generalConfig->permissionsPolicyHeader) {
+            $headers->set('Permissions-Policy', $generalConfig->permissionsPolicyHeader);
+        }
+
         // Tell bots not to index/follow CP and tokenized pages
-        if ($generalConfig->disallowRobots || $request->getIsCpRequest() || $request->getToken() !== null) {
+        if ($generalConfig->disallowRobots || $request->getIsCpRequest() || $request->getToken() !== null || $request->getIsActionRequest()) {
             $headers->set('X-Robots-Tag', 'none');
         }
 
@@ -372,7 +370,7 @@ class Application extends \yii\web\Application
         }
 
         // Did the request include user credentials?
-        list($username, $password) = $this->getRequest()->getAuthCredentials();
+        [$username, $password] = $this->getRequest()->getAuthCredentials();
 
         if (!$username || !$password) {
             return;
@@ -402,13 +400,13 @@ class Application extends \yii\web\Application
             return;
         }
 
+        // Only load the debug toolbar if it's enabled for the user, or Dev Mode is enabled and the request wants it
         $user = $this->getUser()->getIdentity();
-        if (!$user || !$user->admin) {
-            return;
-        }
-
         $pref = $request->getIsCpRequest() ? 'enableDebugToolbarForCp' : 'enableDebugToolbarForSite';
-        if (!$user->getPreference($pref)) {
+        if (!(
+            ($user && $user->admin && $user->getPreference($pref)) ||
+            (YII_DEBUG && $request->getHeaders()->get('X-Debug') === 'enable')
+        )) {
             return;
         }
 
@@ -429,7 +427,7 @@ class Application extends \yii\web\Application
                         UrlManager::class . '::_getMatchedUrlRoute',
                         UrlManager::class . '::_getTemplateRoute',
                         UrlManager::class . '::_getTokenRoute',
-                    ]
+                    ],
                 ],
                 'request' => RequestPanel::class,
                 'log' => LogPanel::class,
@@ -440,7 +438,7 @@ class Application extends \yii\web\Application
                 'mail' => MailPanel::class,
             ],
         ]);
-        /** @var DebugModule $module */
+        /* @var DebugModule $module */
         $module = $this->getModule('debug');
         $module->bootstrap($this);
     }

@@ -32,6 +32,12 @@ use yii\helpers\Console;
 class ResaveController extends Controller
 {
     /**
+     * @var bool Whether to resave element drafts.
+     * @since 3.6.5
+     */
+    public $drafts = false;
+
+    /**
      * @var int|string The ID(s) of the elements to resave.
      */
     public $elementId;
@@ -124,6 +130,7 @@ class ResaveController extends Controller
             case 'entries':
                 $options[] = 'section';
                 $options[] = 'type';
+                $options[] = 'drafts';
                 break;
             case 'matrix-blocks':
                 $options[] = 'field';
@@ -234,9 +241,13 @@ class ResaveController extends Controller
      */
     public function saveElements(ElementQueryInterface $query): int
     {
-        /** @var ElementQuery $query */
-        /** @var ElementInterface $elementType */
+        /* @var ElementQuery $query */
+        /* @var ElementInterface $elementType */
         $elementType = $query->elementType;
+
+        if ($this->drafts) {
+            $query->drafts();
+        }
 
         if ($this->elementId) {
             $query->id(is_int($this->elementId) ? $this->elementId : explode(',', $this->elementId));
@@ -281,10 +292,10 @@ class ResaveController extends Controller
         $elementsService = Craft::$app->getElements();
         $fail = false;
 
-        $beforeCallback = function(BatchElementActionEvent $e) use ($query) {
+        $beforeCallback = function(BatchElementActionEvent $e) use ($query, $count) {
             if ($e->query === $query) {
                 $element = $e->element;
-                $this->stdout("    - Resaving {$element} ({$element->id}) ... ");
+                $this->stdout("    - [{$e->position}/{$count}] Resaving {$element} ({$element->id}) ... ");
             }
         };
 

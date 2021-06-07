@@ -14,10 +14,9 @@ namespace Composer\IO;
 
 use Composer\Config;
 use Composer\Util\ProcessExecutor;
-use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
 
-abstract class BaseIO implements IOInterface, LoggerInterface
+abstract class BaseIO implements IOInterface
 {
     protected $authentications = array();
 
@@ -125,7 +124,9 @@ abstract class BaseIO implements IOInterface, LoggerInterface
         }
 
         foreach ($githubOauth as $domain => $token) {
-            if (!preg_match('{^[.a-z0-9]+$}', $token)) {
+            // allowed chars for GH tokens are from https://github.blog/changelog/2021-03-04-authentication-token-format-updates/
+            // plus dots which were at some point used for GH app integration tokens
+            if (!preg_match('{^[.A-Za-z0-9_]+$}', $token)) {
                 throw new \UnexpectedValueException('Your github oauth token for '.$domain.' contains invalid characters: "'.$token.'"');
             }
             $this->checkAndSetAuthentication($domain, $token, 'x-oauth-basic');
@@ -136,7 +137,9 @@ abstract class BaseIO implements IOInterface, LoggerInterface
         }
 
         foreach ($gitlabToken as $domain => $token) {
-            $this->checkAndSetAuthentication($domain, $token, 'private-token');
+            $username = is_array($token) && array_key_exists("username", $token) ? $token["username"] : $token;
+            $password = is_array($token) && array_key_exists("token", $token) ? $token["token"] : 'private-token';
+            $this->checkAndSetAuthentication($domain, $username, $password);
         }
 
         // reload http basic credentials from config if available
@@ -270,9 +273,9 @@ abstract class BaseIO implements IOInterface, LoggerInterface
     public function log($level, $message, array $context = array())
     {
         if (in_array($level, array(LogLevel::EMERGENCY, LogLevel::ALERT, LogLevel::CRITICAL, LogLevel::ERROR))) {
-            $this->writeError('<error>'.$message.'</error>', true, self::NORMAL);
+            $this->writeError('<error>'.$message.'</error>');
         } elseif ($level === LogLevel::WARNING) {
-            $this->writeError('<warning>'.$message.'</warning>', true, self::NORMAL);
+            $this->writeError('<warning>'.$message.'</warning>');
         } elseif ($level === LogLevel::NOTICE) {
             $this->writeError('<info>'.$message.'</info>', true, self::VERBOSE);
         } elseif ($level === LogLevel::INFO) {

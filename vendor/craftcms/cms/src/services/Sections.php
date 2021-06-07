@@ -133,6 +133,18 @@ class Sections extends Component
      */
     private $_entryTypesById;
 
+    /**
+     * Serializer
+     *
+     * @since 3.5.14
+     */
+    public function __serialize()
+    {
+        $vars = get_object_vars($this);
+        unset($vars['_sections']);
+        return $vars;
+    }
+
     // Sections
     // -------------------------------------------------------------------------
 
@@ -435,7 +447,7 @@ class Sections extends Component
         if ($this->hasEventHandlers(self::EVENT_BEFORE_SAVE_SECTION)) {
             $this->trigger(self::EVENT_BEFORE_SAVE_SECTION, new SectionEvent([
                 'section' => $section,
-                'isNew' => $isNewSection
+                'isNew' => $isNewSection,
             ]));
         }
 
@@ -659,7 +671,7 @@ class Sections extends Component
                 // rows
                 $affectedSiteUids = array_keys($siteSettingData);
 
-                /** @noinspection PhpUndefinedVariableInspection */
+                /* @noinspection PhpUndefinedVariableInspection */
                 foreach ($allOldSiteSettingsRecords as $siteId => $siteSettingsRecord) {
                     $siteUid = array_search($siteId, $siteIdMap, false);
                     if (!in_array($siteUid, $affectedSiteUids, false)) {
@@ -723,7 +735,7 @@ class Sections extends Component
         // Clear caches
         $this->_sections = null;
 
-        /** @var Section $section */
+        /* @var Section $section */
         $section = $this->getSectionById($sectionRecord->id);
 
         // If this is a Single and no entry type changes need to be processed,
@@ -731,7 +743,7 @@ class Sections extends Component
         if (
             !$isNewSection &&
             $section->type === Section::TYPE_SINGLE &&
-            !Craft::$app->getProjectConfig()->areChangesPending(self::CONFIG_ENTRYTYPES_KEY)
+            !Craft::$app->getProjectConfig()->getIsApplyingYamlChanges()
         ) {
             $this->_ensureSingleEntry($section, $siteSettingData);
         }
@@ -740,7 +752,7 @@ class Sections extends Component
         if ($this->hasEventHandlers(self::EVENT_AFTER_SAVE_SECTION)) {
             $this->trigger(self::EVENT_AFTER_SAVE_SECTION, new SectionEvent([
                 'section' => $section,
-                'isNew' => $isNewSection
+                'isNew' => $isNewSection,
             ]));
         }
 
@@ -819,7 +831,7 @@ class Sections extends Component
             return;
         }
 
-        /** @var Section $section */
+        /* @var Section $section */
         $section = $this->getSectionById($sectionRecord->id);
 
         // Fire a 'beforeApplySectionDelete' event
@@ -1188,15 +1200,20 @@ class Sections extends Component
         if ($wasTrashed) {
             // Restore the entries that were deleted with the entry type
             $entries = Entry::find()
+                ->drafts(null)
+                ->draftOf(false)
                 ->sectionId($entryTypeRecord->sectionId)
                 ->typeId($entryTypeRecord->id)
+                ->anyStatus()
                 ->trashed()
+                ->siteId('*')
+                ->unique()
                 ->andWhere(['entries.deletedWithEntryType' => true])
                 ->all();
             Craft::$app->getElements()->restoreElements($entries);
         }
 
-        /** @var EntryType $entryType */
+        /* @var EntryType $entryType */
         $entryType = $this->getEntryTypeById($entryTypeRecord->id);
 
         // If this is for a Single section, ensure its entry exists
@@ -1215,7 +1232,7 @@ class Sections extends Component
                     'siteId' => '*',
                     'unique' => true,
                     'status' => null,
-                ]
+                ],
             ]));
         }
 
@@ -1327,7 +1344,7 @@ class Sections extends Component
             return;
         }
 
-        /** @var EntryType $entryType */
+        /* @var EntryType $entryType */
         $entryType = $this->getEntryTypeById($entryTypeRecord->id);
 
         // Fire a 'beforeApplyEntryTypeDelete' event
@@ -1340,16 +1357,18 @@ class Sections extends Component
         $transaction = Craft::$app->getDb()->beginTransaction();
 
         try {
-            // Delete the entries
+            // Delete the entries, including unpublished drafts
             // (loop through all the sites in case there are any lingering entries from unsupported sites
             $entryQuery = Entry::find()
+                ->drafts(null)
+                ->draftOf(false)
                 ->anyStatus()
                 ->typeId($entryTypeRecord->id);
 
             $elementsService = Craft::$app->getElements();
             foreach (Craft::$app->getSites()->getAllSiteIds() as $siteId) {
                 foreach ($entryQuery->siteId($siteId)->each() as $entry) {
-                    /** @var Entry $entry */
+                    /* @var Entry $entry */
                     $entry->deletedWithEntryType = true;
                     $elementsService->deleteElement($entry);
                 }
@@ -1401,7 +1420,7 @@ class Sections extends Component
             $joinCondition = [
                 'and',
                 $joinCondition,
-                ['structures.dateDeleted' => null]
+                ['structures.dateDeleted' => null],
             ];
         }
 
@@ -1513,6 +1532,7 @@ class Sections extends Component
 
         $elementsService = Craft::$app->getElements();
         $otherEntriesQuery = Entry::find()
+            ->drafts(null)
             ->sectionId($section->id)
             ->siteId('*')
             ->unique()
@@ -1546,7 +1566,7 @@ class Sections extends Component
 
         $structuresService = Craft::$app->getStructures();
 
-        /** @var Entry $entry */
+        /* @var Entry $entry */
         foreach ($query->each() as $entry) {
             $structuresService->appendToRoot($sectionRecord->structureId, $entry, Structures::MODE_INSERT);
         }

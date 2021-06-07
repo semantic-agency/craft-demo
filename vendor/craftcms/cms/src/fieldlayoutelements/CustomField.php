@@ -148,21 +148,10 @@ class CustomField extends BaseField
     /**
      * @inheritdoc
      */
-    protected function labelAttributes(ElementInterface $element = null, bool $static = false): array
-    {
-        return [
-            'id' => "{$this->_field->handle}-label",
-            'for' => $this->_field->handle,
-        ];
-    }
-
-    /**
-     * @inheritdoc
-     */
     protected function defaultLabel(ElementInterface $element = null, bool $static = false)
     {
         if ($this->_field->name !== '' && $this->_field->name !== null && $this->_field->name !== '__blank__') {
-            return Html::encode(Craft::t('site', $this->_field->name));
+            return Craft::t('site', $this->_field->name);
         }
         return null;
     }
@@ -235,6 +224,14 @@ class CustomField extends BaseField
     /**
      * @inheritdoc
      */
+    protected function useFieldset(): bool
+    {
+        return $this->_field->useFieldset();
+    }
+
+    /**
+     * @inheritdoc
+     */
     protected function inputHtml(ElementInterface $element = null, bool $static = false): string
     {
         $value = $element ? $element->getFieldValue($this->_field->handle) : $this->_field->normalizeValue(null);
@@ -249,20 +246,6 @@ class CustomField extends BaseField
             $view->setInitialDeltaValue($this->_field->handle, null);
         }
         return $this->_field->getInputHtml($value, $element);
-    }
-
-    /**
-     * @inheritdoc
-     */
-    protected function orientation(ElementInterface $element = null, bool $static = false): string
-    {
-        if (!$element || !$this->_field->getIsTranslatable($element)) {
-            return parent::orientation();
-        }
-
-        $site = $element->getSite();
-        $locale = Craft::$app->getI18n()->getLocaleById($site->language);
-        return $locale->getOrientation();
     }
 
     /**

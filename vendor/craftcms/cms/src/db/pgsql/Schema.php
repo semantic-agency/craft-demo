@@ -37,7 +37,7 @@ class Schema extends \yii\db\pgsql\Schema
     public function createQueryBuilder(): QueryBuilder
     {
         return new QueryBuilder($this->db, [
-            'separator' => "\n"
+            'separator' => "\n",
         ]);
     }
 
@@ -138,6 +138,7 @@ class Schema extends \yii\db\pgsql\Schema
             ' --no-acl' .
             ' --file="{file}"' .
             ' --schema={schema}' .
+            ' --column-inserts' .
             ' ' . implode(' ', $ignoredTableArgs);
     }
 

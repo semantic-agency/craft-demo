@@ -391,6 +391,7 @@ class Field extends \craft\base\Field
     protected function defineRules(): array
     {
         $rules = parent::defineRules();
+        $rules[] = [['manualConfig'], 'trim'];
         $rules[] = [
             ['manualConfig'],
             function() {
@@ -947,6 +948,8 @@ class Field extends \craft\base\Field
                 }
             }
         }
+        
+        ksort($options);
 
         return $options;
     }
@@ -956,24 +959,20 @@ class Field extends \craft\base\Field
      *
      * @param string $dir The directory name within the config/ folder to look for the config file
      * @param string|null $file The filename to load.
-     * @param string|null $default The default filename to return.
      * @return array|false The config, or false if the file doesn't exist
      */
-    private function _getConfig(string $dir, string $file = null, string $default = null)
+    private function _getConfig(string $dir, string $file = null)
     {
         if (!$file) {
-            if (!$default) {
-                return false;
-            }
-            $file = $default;
+            $file = 'Default.json';
         }
 
         $path = Craft::$app->getPath()->getConfigPath() . DIRECTORY_SEPARATOR . $dir . DIRECTORY_SEPARATOR . $file;
 
         if (!is_file($path)) {
-            if ($file !== $default) {
+            if ($file !== 'Default.json') {
                 // Try again with Default
-                return $this->_getConfig($dir, $default);
+                return $this->_getConfig($dir);
             }
             return false;
         }
@@ -991,7 +990,7 @@ class Field extends \craft\base\Field
         if ($this->configSelectionMode === 'manual') {
             $config = Json::decode($this->manualConfig);
         } else {
-            $config = $this->_getConfig('redactor', $this->redactorConfig, 'Default.json') ?: [];
+            $config = $this->_getConfig('redactor', $this->redactorConfig) ?: [];
         }
 
         // Give plugins a chance to modify the Redactor config
@@ -1015,14 +1014,16 @@ class Field extends \craft\base\Field
         $purifierConfig = HTMLPurifier_Config::createDefault();
         $purifierConfig->autoFinalize = false;
 
-        if ($config = $this->_getConfig('htmlpurifier', $this->purifierConfig)) {
-            foreach ($config as $option => $value) {
-                $purifierConfig->set($option, $value);
-            }
-        } else {
-            $purifierConfig->set('Attr.AllowedFrameTargets', ['_blank']);
-            $purifierConfig->set('Attr.EnableID', true);
-            $purifierConfig->set('HTML.AllowedComments', ['pagebreak']); // remove this later!
+        $config = $this->_getConfig('htmlpurifier', $this->purifierConfig) ?: [
+            'Attr.AllowedFrameTargets' => ['_blank'],
+            'Attr.EnableID' => true,
+            'HTML.AllowedComments' => ['pagebreak'],
+            'HTML.SafeIframe' => true,
+            'URI.SafeIframeRegexp' => '%^(https?:)?//(www\.youtube(-nocookie)?\.com/embed/|player\.vimeo\.com/video/)%',
+        ];
+
+        foreach ($config as $option => $value) {
+            $purifierConfig->set($option, $value);
         }
 
         // Give plugins a chance to modify the HTML Purifier config, or add new ones

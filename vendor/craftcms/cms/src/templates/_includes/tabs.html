@@ -9,6 +9,10 @@
                     class: ['tab', tabIsSelected ? 'sel', class]|filter,
                     href: tab.url,
                     title: tab.label,
+                    tabindex: '-1',
+                    aria: {
+                        label: tab.label,
+                    },
                     html: tab.label|e ~ (class == 'error' ? ' <span data-icon="alert"></span>'),
                 }) }}
             </li>

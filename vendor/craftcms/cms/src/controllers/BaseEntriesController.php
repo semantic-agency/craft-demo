@@ -88,7 +88,7 @@ abstract class BaseEntriesController extends Controller
 
         if ($entry->getIsDraft()) {
             // If it's another user's draft, make sure they have permission to edit those
-            /** @var Entry|DraftBehavior $entry */
+            /* @var Entry|DraftBehavior $entry */
             if ($entry->creatorId != $userId) {
                 $this->requirePermission('editPeerEntryDrafts' . $permissionSuffix);
             }
@@ -105,6 +105,28 @@ abstract class BaseEntriesController extends Controller
     }
 
     /**
+     * Enforces entry deletion permissions.
+     *
+     * @param Entry $entry
+     * @throws ForbiddenHttpException
+     * @since 3.6.0
+     */
+    protected function enforceDeleteEntryPermissions(Entry $entry)
+    {
+        $currentUser = Craft::$app->getUser()->getIdentity();
+        $section = $entry->getSection();
+
+        if ($entry->getIsDraft()) {
+            /* @var Entry|DraftBehavior $entry */
+            if (!$entry->creatorId || $entry->creatorId != $currentUser->id) {
+                $this->requirePermission("deletePeerEntryDrafts:$section->uid");
+            }
+        } else if (!$entry->getIsDeletable()) {
+            throw new ForbiddenHttpException('User is not permitted to perform this action');
+        }
+    }
+
+    /**
      * Returns the document title that should be used on an Edit Entry page.
      *
      * @param Entry
@@ -115,10 +137,10 @@ abstract class BaseEntriesController extends Controller
         $docTitle = $this->pageTitle($entry);
 
         if ($entry->getIsDraft()) {
-            /** @var Entry|DraftBehavior $entry */
+            /* @var Entry|DraftBehavior $entry */
             $docTitle .= ' (' . $entry->draftName . ')';
         } else if ($entry->getIsRevision()) {
-            /** @var Entry|RevisionBehavior $entry */
+            /* @var Entry|RevisionBehavior $entry */
             $docTitle .= ' (' . $entry->getRevisionLabel() . ')';
         }
 
@@ -133,10 +155,14 @@ abstract class BaseEntriesController extends Controller
      */
     protected function pageTitle(Entry $entry): string
     {
-        if ($entry->getIsUnsavedDraft()) {
+        if ($title = trim($entry->title)) {
+            return $title;
+        }
+
+        if ($entry->getIsUnpublishedDraft()) {
             return Craft::t('app', 'Create a new entry');
         }
-        return trim($entry->title) ?: Craft::t('app', 'Edit Entry');
+        return Craft::t('app', 'Edit Entry');
     }
 
     /**

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Arrayy;
 
 /**
- * @template   XKey of array-key
+ * @template   XKey
  * @template   X
  * @implements \Iterator<XKey,X>
  *
@@ -16,7 +16,7 @@ class ArrayyRewindableGenerator implements \Iterator
     /**
      * @var string
      *
-     * @psalm-var string|class-string<\Arrayy\Arrayy<TKey,T>>
+     * @phpstan-var string|class-string<\Arrayy\Arrayy<XKey,X>>
      */
     protected $class;
 
@@ -28,7 +28,7 @@ class ArrayyRewindableGenerator implements \Iterator
     /**
      * @var \Generator
      *
-     * @psalm-var \Generator<XKey,X>
+     * @phpstan-var \Generator<XKey,X>
      */
     protected $generator;
 
@@ -38,10 +38,12 @@ class ArrayyRewindableGenerator implements \Iterator
     protected $onRewind;
 
     /**
-     * @param callable $generatorConstructionFunction a callable that should return a Generator
-     * @param callable $onRewind                      callable that gets invoked with 0 arguments after the iterator
-     *                                                was rewinded
-     * @param string   $class
+     * @param callable      $generatorConstructionFunction
+     *                                                     <p>A callable that should return a Generator.</p>
+     * @param callable|null $onRewind
+     *                                                     <p>Callable that gets invoked with 0 arguments after the iterator
+     *                                                     was rewinded.</p>
+     * @param string        $class
      *
      * @throws \InvalidArgumentException
      */
@@ -64,7 +66,7 @@ class ArrayyRewindableGenerator implements \Iterator
      * @see  http://php.net/manual/en/iterator.current.php
      * @see  Iterator::current
      *
-     * @psalm-return X
+     * @phpstan-return X
      */
     public function current()
     {
@@ -79,7 +81,7 @@ class ArrayyRewindableGenerator implements \Iterator
      * @see  http://php.net/manual/en/iterator.key.php
      * @see  Iterator::key
      *
-     * @psalm-return XKey
+     * @phpstan-return XKey
      */
     public function key()
     {

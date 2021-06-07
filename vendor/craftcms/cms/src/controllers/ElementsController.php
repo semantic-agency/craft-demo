@@ -95,11 +95,19 @@ class ElementsController extends BaseElementsController
             $sources = Craft::$app->getElementIndexes()->getSources($elementType);
         }
 
-        if (!empty($sources) && count($sources) === 1) {
-            $firstSource = reset($sources);
-            $showSidebar = !empty($firstSource['nested']);
-        } else {
-            $showSidebar = !empty($sources);
+        // Figure out if we should be showing the sidebar
+        $foundSource = false;
+        $showSidebar = false;
+        foreach ($sources as $source) {
+            // Make sure it's not a heading
+            if (!isset($source['heading'])) {
+                // If this is the second non-heading source we've come across, or it has nested sources, then we've seen enough
+                if ($foundSource || !empty($source['nested'])) {
+                    $showSidebar = true;
+                    break;
+                }
+                $foundSource = true;
+            }
         }
 
         return $this->asJson([
@@ -109,7 +117,7 @@ class ElementsController extends BaseElementsController
                 'sources' => $sources,
                 'showSidebar' => $showSidebar,
                 'showSiteMenu' => $showSiteMenu,
-            ])
+            ]),
         ]);
     }
 
@@ -193,7 +201,7 @@ class ElementsController extends BaseElementsController
     {
         $categoryIds = $this->request->getParam('categoryIds', []);
 
-        /** @var Category[] $categories */
+        /* @var Category[] $categories */
         $categories = [];
 
         if (!empty($categoryIds)) {
@@ -204,12 +212,12 @@ class ElementsController extends BaseElementsController
                 ->all();
 
             // Fill in the gaps
-            $categoriesService = Craft::$app->getCategories();
-            $categoriesService->fillGapsInCategories($categories);
+            $structuresService = Craft::$app->getStructures();
+            $structuresService->fillGapsInElements($categories);
 
             // Enforce the branch limit
             if ($branchLimit = $this->request->getParam('branchLimit')) {
-                $categoriesService->applyBranchLimitToCategories($categories, $branchLimit);
+                $structuresService->applyBranchLimitToElements($categories, $branchLimit);
             }
         }
 
@@ -268,7 +276,7 @@ class ElementsController extends BaseElementsController
         $elementsService = Craft::$app->getElements();
 
         $elementId = $this->request->getBodyParam('elementId');
-        /** @noinspection PhpUnhandledExceptionInspection */
+        /* @noinspection PhpUnhandledExceptionInspection */
         $siteId = $this->request->getBodyParam('siteId') ?: Craft::$app->getSites()->getCurrentSite()->id;
 
         // Determine the element type
@@ -401,7 +409,7 @@ class ElementsController extends BaseElementsController
 
                 $response['sites'][] = [
                     'id' => $siteId,
-                    'name' => Craft::t('site', $site->name),
+                    'name' => Craft::t('site', $site->getName()),
                 ];
             }
         }

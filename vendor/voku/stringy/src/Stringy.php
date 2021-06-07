@@ -258,10 +258,8 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
     public function append(string ...$suffix): self
     {
         if (\count($suffix) <= 1) {
-            /** @noinspection CallableParameterUseCaseInTypeContextInspection */
             $suffix = $suffix[0];
         } else {
-            /** @noinspection CallableParameterUseCaseInTypeContextInspection */
             $suffix = \implode('', $suffix);
         }
 
@@ -316,7 +314,7 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
      *
      * @param CollectionStringy|static ...$suffix <p>The Stringy objects to append.</p>
      *
-     * @psalm-param CollectionStringy<int,static>|static ...$suffix
+     * @phpstan-param CollectionStringy<int,static>|static ...$suffix
      *
      * @psalm-mutation-free
      *
@@ -597,6 +595,33 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
     }
 
     /**
+     * Call a user function.
+     *
+     * EXAMPLE: <code>
+     * S::create('foo bar lall')->callUserFunction(static function ($str) {
+     *     return UTF8::str_limit($str, 8);
+     * })->toString(); // "foo bar…"
+     * </code>
+     *
+     * @param callable $function
+     * @param mixed    ...$parameter
+     *
+     * @psalm-mutation-free
+     *
+     * @return static
+     *                <p>Object having a $str changed via $function.</p>
+     */
+    public function callUserFunction(callable $function, ...$parameter): self
+    {
+        $str = $function($this->str, ...$parameter);
+
+        return static::create(
+            $str,
+            $this->encoding
+        );
+    }
+
+    /**
      * Returns a camelCase version of the string. Trims surrounding spaces,
      * capitalizes letters following digits, spaces, dashes and underscores,
      * and removes spaces, dashes, as well as underscores.
@@ -671,7 +696,7 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
      * @return static[]
      *                  <p>An array of Stringy objects.</p>
      *
-     * @psalm-return array<int,static>
+     * @phpstan-return array<int,static>
      */
     public function chunk(int $length = 1): array
     {
@@ -685,8 +710,7 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
 
         $chunks = $this->utf8::str_split($this->str, $length);
 
-        /** @noinspection AlterInForeachInspection */
-        foreach ($chunks as $i => &$value) {
+        foreach ($chunks as &$value) {
             $value = static::create($value, $this->encoding);
         }
 
@@ -710,7 +734,7 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
      * @return CollectionStringy|static[]
      *                                    <p>An collection of Stringy objects.</p>
      *
-     * @psalm-return CollectionStringy<int,static>
+     * @phpstan-return CollectionStringy<int,static>
      */
     public function chunkCollection(int $length = 1): CollectionStringy
     {
@@ -823,6 +847,22 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
     }
 
     /**
+     * Checks if string starts with "BOM" (Byte Order Mark Character) character.
+     *
+     * EXAMPLE: <code>s("\xef\xbb\xbf foobar")->containsBom(); // true</code>
+     *
+     * @psalm-mutation-free
+     *
+     * @return bool
+     *              <strong>true</strong> if the string has BOM at the start,<br>
+     *              <strong>false</strong> otherwise
+     */
+    public function containsBom(): bool
+    {
+        return $this->utf8::string_has_bom($this->str);
+    }
+
+    /**
      * Returns the length of the string, implementing the countable interface.
      *
      * EXAMPLE: <code>
@@ -895,7 +935,7 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
      *
      * @return static
      *                <p>A Stringy object.</p>
-     * @psalm-pure
+     * @phpstan-pure
      */
     public static function create($str = '', string $encoding = null): self
     {
@@ -949,33 +989,6 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
     {
         return static::create(
             $this->utf8::str_dasherize($this->str),
-            $this->encoding
-        );
-    }
-
-    /**
-     * Call a user function.
-     *
-     * EXAMPLE: <code>
-     * S::create('foo bar lall')->callUserFunction(static function ($str) {
-     *     return UTF8::str_limit($str, 8);
-     * })->toString(); // "foo bar…"
-     * </code>
-     *
-     * @param callable $function
-     * @param mixed    ...$parameter
-     *
-     * @psalm-mutation-free
-     *
-     * @return static
-     *                <p>Object having a $str changed via $function.</p>
-     */
-    public function callUserFunction(callable $function, ...$parameter): self
-    {
-        $str = $function($this->str, ...$parameter);
-
-        return static::create(
-            $str,
             $this->encoding
         );
     }
@@ -1229,6 +1242,7 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
         }
 
         $strings = \explode($delimiter, $this->str, $limit);
+        /** @phpstan-ignore-next-line - if "$delimiter" is an empty string, then "explode()" will return "false" */
         if ($strings === false) {
             $strings = [];
         }
@@ -1261,7 +1275,7 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
      * @return CollectionStringy|static[]
      *                                    <p>An collection of Stringy objects.</p>
      *
-     * @psalm-return CollectionStringy<int,static>
+     * @phpstan-return CollectionStringy<int,static>
      */
     public function explodeCollection(string $delimiter, int $limit = \PHP_INT_MAX): CollectionStringy
     {
@@ -1389,7 +1403,7 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
 
                     unset($arg[$name]);
 
-                    $str = \substr_replace($str, $param, (int) $offset, \strlen($nameTmp));
+                    $str = \substr_replace($str, (string) $param, (int) $offset, \strlen($nameTmp));
                 }
 
                 unset($args[$key]);
@@ -1435,7 +1449,7 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
      * @return \ArrayIterator
      *                        <p>An iterator for the characters in the string.</p>
      *
-     * @psalm-return \ArrayIterator<array-key,string>
+     * @phpstan-return \ArrayIterator<array-key,string>
      */
     public function getIterator(): \ArrayIterator
     {
@@ -1959,6 +1973,26 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
     }
 
     /**
+     * Checks if a string is 7 bit ASCII.
+     *
+     * EXAMPLE: <code>s('白')->isAscii; // false</code>
+     *
+     * @psalm-mutation-free
+     *
+     * @return bool
+     *              <p>
+     *              <strong>true</strong> if it is ASCII<br>
+     *              <strong>false</strong> otherwise
+     *              </p>
+     *
+     * @noinspection GetSetMethodCorrectnessInspection
+     */
+    public function isAscii(): bool
+    {
+        return $this->utf8::is_ascii($this->str);
+    }
+
+    /**
      * Returns true if the string is base64 encoded, false otherwise.
      *
      * EXAMPLE: <code>
@@ -1978,6 +2012,20 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
     }
 
     /**
+     * Check if the input is binary... (is look like a hack).
+     *
+     * EXAMPLE: <code>s(01)->isBinary(); // true</code>
+     *
+     * @psalm-mutation-free
+     *
+     * @return bool
+     */
+    public function isBinary(): bool
+    {
+        return $this->utf8::is_binary($this->str);
+    }
+
+    /**
      * Returns true if the string contains only whitespace chars, false otherwise.
      *
      * EXAMPLE: <code>
@@ -1992,6 +2040,23 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
     public function isBlank(): bool
     {
         return $this->utf8::is_blank($this->str);
+    }
+
+    /**
+     * Checks if the given string is equal to any "Byte Order Mark".
+     *
+     * WARNING: Use "s::string_has_bom()" if you will check BOM in a string.
+     *
+     * EXAMPLE: <code>s->("\xef\xbb\xbf")->isBom(); // true</code>
+     *
+     * @psalm-mutation-free
+     *
+     * @return bool
+     *              <p><strong>true</strong> if the $utf8_chr is Byte Order Mark, <strong>false</strong> otherwise.</p>
+     */
+    public function isBom(): bool
+    {
+        return $this->utf8::is_bom($this->str);
     }
 
     /**
@@ -2329,6 +2394,71 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
     }
 
     /**
+     * /**
+     * Check if $url is an correct url.
+     *
+     * @param bool $disallow_localhost
+     *
+     * @psalm-mutation-free
+     *
+     * @return bool
+     */
+    public function isUrl(bool $disallow_localhost = false): bool
+    {
+        return $this->utf8::is_url($this->str, $disallow_localhost);
+    }
+
+    /**
+     * Check if the string is UTF-16.
+     *
+     * @psalm-mutation-free
+     *
+     * @return false|int
+     *                   <strong>false</strong> if is't not UTF-16,<br>
+     *                   <strong>1</strong> for UTF-16LE,<br>
+     *                   <strong>2</strong> for UTF-16BE
+     */
+    public function isUtf16()
+    {
+        return $this->utf8::is_utf16($this->str);
+    }
+
+    /**
+     * Check if the string is UTF-32.
+     *
+     * @psalm-mutation-free
+     *
+     * @return false|int
+     *                   <strong>false</strong> if is't not UTF-32,<br>
+     *                   <strong>1</strong> for UTF-32LE,<br>
+     *                   <strong>2</strong> for UTF-32BE
+     */
+    public function isUtf32()
+    {
+        return $this->utf8::is_utf32($this->str);
+    }
+
+    /**
+     * Checks whether the passed input contains only byte sequences that appear valid UTF-8.
+     *
+     * EXAMPLE: <code>
+     * s('Iñtërnâtiônàlizætiøn')->isUtf8(); // true
+     * //
+     * s("Iñtërnâtiônàlizætiøn\xA0\xA1")->isUtf8(); // false
+     * </code>
+     *
+     * @param bool $strict <p>Check also if the string is not UTF-16 or UTF-32.</p>
+     *
+     * @psalm-mutation-free
+     *
+     * @return bool
+     */
+    public function isUtf8(bool $strict = false): bool
+    {
+        return $this->utf8::is_utf8($this->str, $strict);
+    }
+
+    /**
      * Returns true if the string contains only whitespace chars, false otherwise.
      *
      * EXAMPLE: <code>
@@ -2571,7 +2701,7 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
      * @return static[]
      *                  <p>An array of Stringy objects.</p>
      *
-     * @psalm-return array<int,static>
+     * @phpstan-return array<int,static>
      */
     public function lines(): array
     {
@@ -2604,7 +2734,7 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
      * @return CollectionStringy|static[]
      *                                    <p>An collection of Stringy objects.</p>
      *
-     * @psalm-return CollectionStringy<int,static>
+     * @phpstan-return CollectionStringy<int,static>
      */
     public function linesCollection(): CollectionStringy
     {
@@ -2879,7 +3009,6 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
     public function offsetSet($offset, $value)
     {
         // Stringy is immutable, cannot directly set char
-        /** @noinspection ThrowRawExceptionInspection */
         throw new \Exception('Stringy object is immutable, cannot modify char');
     }
 
@@ -2900,7 +3029,6 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
     public function offsetUnset($offset)
     {
         // Don't allow directly modifying the string
-        /** @noinspection ThrowRawExceptionInspection */
         throw new \Exception('Stringy object is immutable, cannot unset char');
     }
 
@@ -3057,10 +3185,8 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
     public function prepend(string ...$prefix): self
     {
         if (\count($prefix) <= 1) {
-            /** @noinspection CallableParameterUseCaseInTypeContextInspection */
             $prefix = $prefix[0];
         } else {
-            /** @noinspection CallableParameterUseCaseInTypeContextInspection */
             $prefix = \implode('', $prefix);
         }
 
@@ -3075,7 +3201,7 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
      *
      * @param CollectionStringy|static ...$prefix <p>The Stringy objects to append.</p>
      *
-     * @psalm-param CollectionStringy<int,static>|static ...$prefix
+     * @phpstan-param CollectionStringy<int,static>|static ...$prefix
      *
      * @psalm-mutation-free
      *
@@ -3761,7 +3887,7 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
      * @return static[]
      *                  <p>An array of Stringy objects.</p>
      *
-     * @psalm-return array<int,static>
+     * @phpstan-return array<int,static>
      */
     public function split(string $pattern, int $limit = null): array
     {
@@ -3774,8 +3900,7 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
         }
 
         $array = $this->utf8::str_split_pattern($this->str, $pattern, $limit);
-        /** @noinspection AlterInForeachInspection */
-        foreach ($array as $i => &$value) {
+        foreach ($array as &$value) {
             $value = static::create($value, $this->encoding);
         }
 
@@ -3803,7 +3928,7 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
      * @return CollectionStringy|static[]
      *                                    <p>An collection of Stringy objects.</p>
      *
-     * @psalm-return CollectionStringy<int,static>
+     * @phpstan-return CollectionStringy<int,static>
      */
     public function splitCollection(string $pattern, int $limit = null): CollectionStringy
     {
@@ -4183,8 +4308,8 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
     }
 
     /**
-     * Returns a trimmed string in proper title case: Also accepts an array, $ignore, allowing you to list words not to be
-     * capitalized.
+     * Returns a trimmed string in proper title case: Also accepts an array, $ignore, allowing you to list words not to
+     * be capitalized.
      *
      * EXAMPLE: <code>
      * </code>
@@ -4267,6 +4392,7 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
     {
         /**
          * @psalm-suppress ArgumentTypeCoercion -> maybe the string looks like an int ;)
+         * @phpstan-ignore-next-line
          */
         return $this->utf8::to_boolean($this->str);
     }
@@ -4806,7 +4932,7 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
      *
      * @return static[]
      *
-     * @psalm-return array<int,static>
+     * @phpstan-return array<int,static>
      */
     public function words(
         string $char_list = '',
@@ -4856,7 +4982,7 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
      * @return CollectionStringy|static[]
      *                                    <p>An collection of Stringy objects.</p>
      *
-     * @psalm-return CollectionStringy<int,static>
+     * @phpstan-return CollectionStringy<int,static>
      */
     public function wordsCollection(
         string $char_list = '',
@@ -4895,8 +5021,6 @@ class Stringy implements \ArrayAccess, \Countable, \IteratorAggregate, \JsonSeri
 
     /**
      * Returns the replacements for the toAscii() method.
-     *
-     * @noinspection PhpUnused
      *
      * @psalm-mutation-free
      *

@@ -9,11 +9,14 @@ namespace craft\controllers;
 
 use Craft;
 use craft\base\Element;
+use craft\db\Table;
 use craft\elements\Entry;
 use craft\elements\User;
 use craft\errors\InvalidElementException;
 use craft\errors\UnsupportedSiteException;
 use craft\helpers\DateTimeHelper;
+use craft\helpers\Db;
+use craft\helpers\ElementHelper;
 use craft\helpers\UrlHelper;
 use craft\models\Section;
 use craft\models\Site;
@@ -61,7 +64,7 @@ class EntriesController extends BaseEntriesController
             'entryId' => $entryId,
             'draftId' => $draftId,
             'revisionId' => $revisionId,
-            'entry' => $entry
+            'entry' => $entry,
         ];
 
         if ($site !== null) {
@@ -79,11 +82,11 @@ class EntriesController extends BaseEntriesController
 
         $this->getView()->registerAssetBundle(EditEntryAsset::class);
 
-        /** @var Site $site */
+        /* @var Site $site */
         $site = $variables['site'];
-        /** @var Entry $entry */
+        /* @var Entry $entry */
         $entry = $variables['entry'];
-        /** @var Section $section */
+        /* @var Section $section */
         $section = $variables['section'];
 
         // Make sure they have permission to edit this entry
@@ -136,7 +139,7 @@ class EntriesController extends BaseEntriesController
                 'siteId' => $site->id,
                 'sectionId' => $section->id,
                 'status' => null,
-                'where' => ['not in', 'elements.id', $excludeIds]
+                'where' => ['not in', 'elements.id', $excludeIds],
             ];
 
             if ($section->maxLevels) {
@@ -193,34 +196,34 @@ class EntriesController extends BaseEntriesController
         $variables['crumbs'] = [
             [
                 'label' => Craft::t('app', 'Entries'),
-                'url' => UrlHelper::url('entries')
-            ]
+                'url' => UrlHelper::url('entries'),
+            ],
         ];
 
         if ($section->type === Section::TYPE_SINGLE) {
             $variables['crumbs'][] = [
                 'label' => Craft::t('app', 'Singles'),
-                'url' => UrlHelper::url('entries/singles')
+                'url' => UrlHelper::url('entries/singles'),
             ];
         } else {
             $variables['crumbs'][] = [
                 'label' => Craft::t('site', $section->name),
-                'url' => UrlHelper::url('entries/' . $section->handle)
+                'url' => UrlHelper::url('entries/' . $section->handle),
             ];
 
             if ($section->type === Section::TYPE_STRUCTURE) {
-                /** @var Entry $ancestor */
+                /* @var Entry $ancestor */
                 foreach ($entry->getAncestors()->all() as $ancestor) {
                     $variables['crumbs'][] = [
                         'label' => $ancestor->title,
-                        'url' => $ancestor->getCpEditUrl()
+                        'url' => $ancestor->getCpEditUrl(),
                     ];
                 }
             }
         }
 
         // Multiple entry types?
-        $entryTypes = $section->getEntryTypes();
+        $entryTypes = $entry->getAvailableEntryTypes();
 
         if (count($entryTypes) > 1) {
             $variables['showEntryTypes'] = true;
@@ -228,7 +231,7 @@ class EntriesController extends BaseEntriesController
             foreach ($entryTypes as $entryType) {
                 $variables['entryTypeOptions'][] = [
                     'label' => Craft::t('site', $entryType->name),
-                    'value' => $entryType->id
+                    'value' => $entryType->id,
                 ];
             }
 
@@ -238,10 +241,10 @@ class EntriesController extends BaseEntriesController
         }
 
         // Can the user delete the entry?
-        $variables['canDeleteSource'] = $section->type !== Section::TYPE_SINGLE && (
-                ($entry->authorId == $currentUser->id && $currentUser->can('deleteEntries' . $variables['permissionSuffix'])) ||
-                ($entry->authorId != $currentUser->id && $currentUser->can('deletePeerEntries' . $variables['permissionSuffix']))
-            );
+        $variables['canDeleteSource'] = $entry->getIsDeletable();
+
+        // Can the user delete the entry for the current site?
+        $variables['canDeleteForSite'] = $section->propagationMethod === Section::PROPAGATION_METHOD_CUSTOM;
 
         // Render the template!
         return $this->renderTemplate('entries/_edit', $variables);
@@ -330,7 +333,7 @@ class EntriesController extends BaseEntriesController
                     $forceDisabled = true;
                 }
             } catch (InvalidElementException $e) {
-                /** @var Entry $clone */
+                /* @var Entry $clone */
                 $clone = $e->element;
 
                 if ($this->request->getAcceptsJson()) {
@@ -345,7 +348,7 @@ class EntriesController extends BaseEntriesController
                 // Send the original entry back to the template, with any validation errors on the clone
                 $entry->addErrors($clone->getErrors());
                 Craft::$app->getUrlManager()->setRouteParams([
-                    'entry' => $entry
+                    'entry' => $entry,
                 ]);
 
                 return null;
@@ -393,7 +396,7 @@ class EntriesController extends BaseEntriesController
 
             // Send the entry back to the template
             Craft::$app->getUrlManager()->setRouteParams([
-                $entryVariable => $entry
+                $entryVariable => $entry,
             ]);
 
             return null;
@@ -439,6 +442,88 @@ class EntriesController extends BaseEntriesController
     }
 
     /**
+     * Deletes an entry for the given site.
+     *
+     * @return Response|null
+     * @throws NotFoundHttpException
+     * @throws BadRequestHttpException
+     * @since 3.6.0
+     */
+    public function actionDeleteForSite()
+    {
+        $this->requirePostRequest();
+
+        // Make sure they have permission to access this site
+        $siteId = $this->request->getRequiredBodyParam('siteId');
+        $sitesService = Craft::$app->getSites();
+        $site = $sitesService->getSiteById($siteId);
+
+        if (!$site) {
+            throw new BadRequestHttpException("Invalid site ID: $siteId");
+        }
+
+        $this->enforceSitePermission($site);
+
+        // Get the entry in any but the to-be-deleted site -- preferably one the user has access to edit
+        $draftId = $this->request->getBodyParam('draftId');
+        $entryId = $this->request->getBodyParam('sourceId');
+        $editableSiteIds = $sitesService->getEditableSiteIds();
+
+        $query = Entry::find()
+            ->siteId(['not', $siteId])
+            ->preferSites($editableSiteIds)
+            ->unique()
+            ->anyStatus();
+
+        if ($draftId) {
+            $query->draftId($draftId);
+        } else {
+            $query->id($entryId);
+        }
+
+        $entry = $query->one();
+        if (!$entry) {
+            throw new NotFoundHttpException('Entry not found');
+        }
+
+        $this->enforceEditEntryPermissions($entry);
+        $this->enforceDeleteEntryPermissions($entry);
+
+        // Delete the row in elements_sites
+        Db::delete(Table::ELEMENTS_SITES, [
+            'elementId' => $entry->id,
+            'siteId' => $siteId,
+        ]);
+
+        // Resave the entry
+        $entry->setScenario(Element::SCENARIO_ESSENTIALS);
+        Craft::$app->getElements()->saveElement($entry);
+
+        if ($draftId) {
+            $this->setSuccessFlash(Craft::t('app', 'Draft deleted for site.'));
+        } else {
+            $this->setSuccessFlash(Craft::t('app', 'Entry deleted for site.'));
+        }
+
+        if (!in_array($entry->siteId, $editableSiteIds)) {
+            // That was the only site they had access to, so send them back to the Entries index
+            return $this->redirect('entries');
+        }
+
+        if ($draftId) {
+            // Redirect to the same draft in the fetched site
+            $source = ElementHelper::sourceElement($entry) ?? $entry;
+            return $this->redirect(UrlHelper::url($source->getCpEditUrl(), [
+                'siteId' => $entry->siteId,
+                'draftId' => $draftId,
+            ]));
+        }
+
+        // Redirect them to the same entry in the fetched site
+        return $this->redirect($entry->getCpEditUrl());
+    }
+
+    /**
      * Deletes an entry.
      *
      * @return Response|null
@@ -456,13 +541,7 @@ class EntriesController extends BaseEntriesController
             throw new BadRequestHttpException("Invalid entry ID: $entryId");
         }
 
-        $currentUser = Craft::$app->getUser()->getIdentity();
-
-        if ($entry->authorId == $currentUser->id) {
-            $this->requirePermission('deleteEntries:' . $entry->getSection()->uid);
-        } else {
-            $this->requirePermission('deletePeerEntries:' . $entry->getSection()->uid);
-        }
+        $this->enforceDeleteEntryPermissions($entry);
 
         if (!Craft::$app->getElements()->deleteElement($entry)) {
             if ($this->request->getAcceptsJson()) {
@@ -473,7 +552,7 @@ class EntriesController extends BaseEntriesController
 
             // Send the entry back to the template
             Craft::$app->getUrlManager()->setRouteParams([
-                'entry' => $entry
+                'entry' => $entry,
             ]);
 
             return null;
@@ -516,7 +595,7 @@ class EntriesController extends BaseEntriesController
         $siteIds = $this->editableSiteIds($variables['section']);
 
         if (empty($variables['site'])) {
-            /** @noinspection PhpUnhandledExceptionInspection */
+            /* @noinspection PhpUnhandledExceptionInspection */
             $variables['site'] = Craft::$app->getSites()->getCurrentSite();
 
             if (!in_array($variables['site']->id, $siteIds, false)) {
@@ -526,7 +605,7 @@ class EntriesController extends BaseEntriesController
             $site = $variables['site'];
         } else {
             // Make sure they were requesting a valid site
-            /** @var Site $site */
+            /* @var Site $site */
             $site = $variables['site'];
             if (!in_array($site->id, $siteIds, false)) {
                 throw new ForbiddenHttpException('User not permitted to edit content in this site');
@@ -595,7 +674,7 @@ class EntriesController extends BaseEntriesController
 
         if (!$typeId) {
             // Default to the section's first entry type
-            $typeId = $variables['entry']->typeId ?? $variables['section']->getEntryTypes()[0]->id;
+            $typeId = $variables['entry']->typeId ?? $variables['entry']->getAvailableEntryTypes()[0]->id;
         }
 
         $variables['entry']->typeId = $typeId;
@@ -738,7 +817,7 @@ class EntriesController extends BaseEntriesController
 
         if (!$entry->typeId) {
             // Default to the section's first entry type
-            $entry->typeId = $entry->getSection()->getEntryTypes()[0]->id;
+            $entry->typeId = $entry->getAvailableEntryTypes()[0]->id;
         }
 
         // Prevent the last entry type's field layout from being used
@@ -759,13 +838,12 @@ class EntriesController extends BaseEntriesController
         // Parent
         if (($parentId = $this->request->getBodyParam('parentId')) !== null) {
             if (is_array($parentId)) {
-                $parentId = reset($parentId) ?: '';
+                $parentId = reset($parentId) ?: false;
             }
-
-            $entry->newParentId = $parentId ?: '';
+            $entry->newParentId = $parentId ?: false;
         }
 
         // Revision notes
-        $entry->setRevisionNotes($this->request->getBodyParam('revisionNotes'));
+        $entry->setRevisionNotes($this->request->getBodyParam('notes'));
     }
 }

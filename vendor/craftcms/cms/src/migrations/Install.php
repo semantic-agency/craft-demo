@@ -1,4 +1,4 @@
-<?php /** @noinspection RepetitiveMethodCallsInspection */
+<?php /* @noinspection RepetitiveMethodCallsInspection */
 
 /**
  * @link https://craftcms.com/
@@ -14,6 +14,7 @@ use craft\db\Migration;
 use craft\db\Table;
 use craft\elements\Asset;
 use craft\elements\User;
+use craft\enums\LicenseKeyStatus;
 use craft\errors\InvalidPluginException;
 use craft\helpers\App;
 use craft\helpers\DateTimeHelper;
@@ -239,6 +240,7 @@ class Install extends Migration
             'notes' => $this->text(),
             'trackChanges' => $this->boolean()->notNull()->defaultValue(false),
             'dateLastMerged' => $this->dateTime(),
+            'saved' => $this->boolean()->notNull()->defaultValue(true),
         ]);
         $this->createTable(Table::ELEMENTINDEXSETTINGS, [
             'id' => $this->primaryKey(),
@@ -334,6 +336,7 @@ class Install extends Migration
             'name' => $this->string()->notNull(),
             'dateCreated' => $this->dateTime()->notNull(),
             'dateUpdated' => $this->dateTime()->notNull(),
+            'dateDeleted' => $this->dateTime()->null(),
             'uid' => $this->uid(),
         ]);
         $this->createTable(Table::FIELDLAYOUTFIELDS, [
@@ -459,7 +462,14 @@ class Install extends Migration
             'handle' => $this->string()->notNull(),
             'version' => $this->string()->notNull(),
             'schemaVersion' => $this->string()->notNull(),
-            'licenseKeyStatus' => $this->enum('licenseKeyStatus', ['valid', 'invalid', 'mismatched', 'astray', 'unknown'])->notNull()->defaultValue('unknown'),
+            'licenseKeyStatus' => $this->enum('licenseKeyStatus', [
+                LicenseKeyStatus::Valid,
+                LicenseKeyStatus::Trial,
+                LicenseKeyStatus::Invalid,
+                LicenseKeyStatus::Mismatched,
+                LicenseKeyStatus::Astray,
+                LicenseKeyStatus::Unknown,
+            ])->notNull()->defaultValue(LicenseKeyStatus::Unknown),
             'licensedEdition' => $this->string(),
             'installDate' => $this->dateTime()->notNull(),
             'dateCreated' => $this->dateTime()->notNull(),
@@ -470,6 +480,11 @@ class Install extends Migration
             'path' => $this->string()->notNull(),
             'value' => $this->text()->notNull(),
             'PRIMARY KEY([[path]])',
+        ]);
+        $this->createTable(Table::PROJECTCONFIGNAMES, [
+            'uid' => $this->uid()->notNull(),
+            'name' => $this->string()->notNull(),
+            'PRIMARY KEY([[uid]])',
         ]);
         $this->createTable(Table::QUEUE, [
             'id' => $this->primaryKey(),
@@ -727,6 +742,8 @@ class Install extends Migration
             'type' => $this->string()->notNull(),
             'hasUrls' => $this->boolean()->defaultValue(true)->notNull(),
             'url' => $this->string(),
+            'titleTranslationMethod' => $this->string()->notNull()->defaultValue(Field::TRANSLATION_METHOD_SITE),
+            'titleTranslationKeyFormat' => $this->text(),
             'settings' => $this->text(),
             'sortOrder' => $this->smallInteger()->unsigned(),
             'dateCreated' => $this->dateTime()->notNull(),
@@ -775,6 +792,7 @@ class Install extends Migration
         $this->createIndex(null, Table::CONTENT, ['siteId'], false);
         $this->createIndex(null, Table::CONTENT, ['title'], false);
         $this->createIndex(null, Table::DEPRECATIONERRORS, ['key', 'fingerprint'], true);
+        $this->createIndex(null, Table::DRAFTS, ['saved'], false);
         $this->createIndex(null, Table::ELEMENTINDEXSETTINGS, ['type'], true);
         $this->createIndex(null, Table::ELEMENTS, ['dateDeleted'], false);
         $this->createIndex(null, Table::ELEMENTS, ['fieldLayoutId'], false);
@@ -798,7 +816,8 @@ class Install extends Migration
         $this->createIndex(null, Table::ENTRYTYPES, ['sectionId'], false);
         $this->createIndex(null, Table::ENTRYTYPES, ['fieldLayoutId'], false);
         $this->createIndex(null, Table::ENTRYTYPES, ['dateDeleted'], false);
-        $this->createIndex(null, Table::FIELDGROUPS, ['name']);
+        $this->createIndex(null, Table::FIELDGROUPS, ['name'], false);
+        $this->createIndex(null, Table::FIELDGROUPS, ['dateDeleted', 'name'], false);
         $this->createIndex(null, Table::FIELDLAYOUTFIELDS, ['layoutId', 'fieldId'], true);
         $this->createIndex(null, Table::FIELDLAYOUTFIELDS, ['sortOrder'], false);
         $this->createIndex(null, Table::FIELDLAYOUTFIELDS, ['tabId'], false);
@@ -901,19 +920,19 @@ class Install extends Migration
                 'keywords' => $this->text()->notNull(),
             ], ' ENGINE=MyISAM');
 
-            $this->addPrimaryKey($this->db->getIndexName(Table::SEARCHINDEX, 'elementId,attribute,fieldId,siteId', true), Table::SEARCHINDEX, 'elementId,attribute,fieldId,siteId');
+            $this->addPrimaryKey(null, Table::SEARCHINDEX, ['elementId', 'attribute', 'fieldId', 'siteId']);
 
             $sql = 'CREATE FULLTEXT INDEX ' .
-                $this->db->quoteTableName($this->db->getIndexName(Table::SEARCHINDEX, 'keywords')) . ' ON ' .
+                $this->db->quoteTableName($this->db->getIndexName()) . ' ON ' .
                 $this->db->quoteTableName(Table::SEARCHINDEX) . ' ' .
                 '(' . $this->db->quoteColumnName('keywords') . ')';
 
             $this->db->createCommand($sql)->execute();
         } else {
             // Postgres is case-sensitive
-            $this->createIndex($this->db->getIndexName(Table::ELEMENTS_SITES, ['uri', 'siteId']), Table::ELEMENTS_SITES, ['lower([[uri]])', 'siteId']);
-            $this->createIndex($this->db->getIndexName(Table::USERS, ['email']), Table::USERS, ['lower([[email]])']);
-            $this->createIndex($this->db->getIndexName(Table::USERS, ['username']), Table::USERS, ['lower([[username]])']);
+            $this->createIndex(null, Table::ELEMENTS_SITES, ['lower([[uri]])', 'siteId']);
+            $this->createIndex(null, Table::USERS, ['lower([[email]])']);
+            $this->createIndex(null, Table::USERS, ['lower([[username]])']);
 
             $this->createTable(Table::SEARCHINDEX, [
                 'elementId' => $this->integer()->notNull(),
@@ -924,12 +943,12 @@ class Install extends Migration
                 'keywords_vector' => $this->db->getSchema()->createColumnSchemaBuilder('tsvector')->notNull(),
             ]);
 
-            $this->addPrimaryKey($this->db->getIndexName(Table::SEARCHINDEX, 'elementId,attribute,fieldId,siteId', true), Table::SEARCHINDEX, 'elementId,attribute,fieldId,siteId');
+            $this->addPrimaryKey(null, Table::SEARCHINDEX, ['elementId', 'attribute', 'fieldId', 'siteId']);
 
-            $sql = 'CREATE INDEX ' . $this->db->quoteTableName($this->db->getIndexName(Table::SEARCHINDEX, 'keywords_vector')) . ' ON ' . Table::SEARCHINDEX . ' USING GIN([[keywords_vector]] [[pg_catalog]].[[tsvector_ops]]) WITH (FASTUPDATE=YES)';
+            $sql = 'CREATE INDEX ' . $this->db->quoteTableName($this->db->getIndexName()) . ' ON ' . Table::SEARCHINDEX . ' USING GIN([[keywords_vector]] [[pg_catalog]].[[tsvector_ops]]) WITH (FASTUPDATE=YES)';
             $this->db->createCommand($sql)->execute();
 
-            $sql = 'CREATE INDEX ' . $this->db->quoteTableName($this->db->getIndexName(Table::SEARCHINDEX, 'keywords')) . ' ON ' . Table::SEARCHINDEX . ' USING btree(keywords)';
+            $sql = 'CREATE INDEX ' . $this->db->quoteTableName($this->db->getIndexName()) . ' ON ' . Table::SEARCHINDEX . ' USING btree(keywords)';
             $this->db->createCommand($sql)->execute();
         }
     }
@@ -968,7 +987,7 @@ class Install extends Migration
         $this->addForeignKey(null, Table::ELEMENTS, ['fieldLayoutId'], Table::FIELDLAYOUTS, ['id'], 'SET NULL', null);
         $this->addForeignKey(null, Table::ELEMENTS_SITES, ['elementId'], Table::ELEMENTS, ['id'], 'CASCADE', null);
         $this->addForeignKey(null, Table::ELEMENTS_SITES, ['siteId'], Table::SITES, ['id'], 'CASCADE', 'CASCADE');
-        $this->addForeignKey(null, Table::ENTRIES, ['authorId'], Table::USERS, ['id'], 'CASCADE', null);
+        $this->addForeignKey(null, Table::ENTRIES, ['authorId'], Table::USERS, ['id'], 'SET NULL', null);
         $this->addForeignKey(null, Table::ENTRIES, ['id'], Table::ELEMENTS, ['id'], 'CASCADE', null);
         $this->addForeignKey(null, Table::ENTRIES, ['sectionId'], Table::SECTIONS, ['id'], 'CASCADE', null);
         $this->addForeignKey(null, Table::ENTRIES, ['parentId'], Table::ENTRIES, ['id'], 'SET NULL', null);
@@ -1046,10 +1065,7 @@ class Install extends Migration
 
         $applyExistingProjectConfig = false;
 
-        if (
-            $this->applyProjectConfigYaml &&
-            file_exists($configFile = Craft::$app->getPath()->getProjectConfigFilePath())
-        ) {
+        if ($this->applyProjectConfigYaml && $projectConfig->getDoesYamlExist()) {
             try {
                 $expectedSchemaVersion = (string)$projectConfig->get(ProjectConfig::CONFIG_SCHEMA_VERSION_KEY, true);
                 $craftSchemaVersion = (string)Craft::$app->schemaVersion;
@@ -1060,7 +1076,7 @@ class Install extends Migration
                 }
 
                 // Make sure at least sites are processed
-                ProjectConfigHelper::ensureAllSitesProcessed();
+                ProjectConfigHelper::ensureAllSitesProcessed(true);
 
                 $this->_installPlugins();
                 $applyExistingProjectConfig = true;
@@ -1068,10 +1084,11 @@ class Install extends Migration
                 echo "    > can't apply existing project config: {$e->getMessage()}\n";
                 Craft::$app->getErrorHandler()->logException($e);
 
-                // Rename project.yaml so we can create a new one
-                $backupFile = pathinfo(ProjectConfig::CONFIG_FILENAME, PATHINFO_FILENAME) . date('-Y-m-d-His') . '.yaml';
-                echo "    > renaming project.yaml to $backupFile and moving to config backup folder ... ";
-                rename($configFile, Craft::$app->getPath()->getConfigBackupPath() . '/' . $backupFile);
+                // Rename config/project/ so we can create a new one
+                $backupName = "project-" . date('Y-m-d-His');
+                echo "    > moving config/project/ to storage/config-backups/$backupName ... ";
+                $pathService = Craft::$app->getPath();
+                rename($pathService->getProjectConfigPath(), $pathService->getConfigBackupPath() . DIRECTORY_SEPARATOR . $backupName);
                 echo "done\n";
 
                 // Forget everything we knew about the old config
@@ -1099,10 +1116,10 @@ class Install extends Migration
             // Update the primary site with the installer settings
             $sitesService = Craft::$app->getSites();
             $site = $sitesService->getPrimarySite();
-            $site->baseUrl = $this->site->baseUrl;
+            $site->setBaseUrl($this->site->getBaseUrl(false));
             $site->hasUrls = $this->site->hasUrls;
             $site->language = $this->site->language;
-            $site->name = $this->site->name;
+            $site->setName($this->site->getName(false));
             $sitesService->saveSite($site);
         }
 
@@ -1115,7 +1132,7 @@ class Install extends Migration
             'username' => $this->username,
             'newPassword' => $this->password,
             'email' => $this->email,
-            'admin' => true
+            'admin' => true,
         ]);
         Craft::$app->getElements()->saveElement($user);
         echo "done\n";
@@ -1195,21 +1212,21 @@ class Install extends Migration
             ],
             'email' => [
                 'fromEmail' => $this->email,
-                'fromName' => $this->site->name,
+                'fromName' => $this->site->getName(),
                 'transportType' => Sendmail::class,
             ],
             'siteGroups' => [
                 $siteGroupUid => [
-                    'name' => $this->site->name,
+                    'name' => $this->site->getName(),
                 ],
             ],
             'sites' => [
                 StringHelper::UUID() => [
-                    'baseUrl' => $this->site->baseUrl,
+                    'baseUrl' => $this->site->getBaseUrl(false),
                     'handle' => $this->site->handle,
                     'hasUrls' => $this->site->hasUrls,
                     'language' => $this->site->language,
-                    'name' => $this->site->name,
+                    'name' => $this->site->getName(false),
                     'primary' => true,
                     'siteGroup' => $siteGroupUid,
                     'sortOrder' => 1,
@@ -1217,7 +1234,7 @@ class Install extends Migration
             ],
             'system' => [
                 'edition' => App::editionHandle(Craft::Solo),
-                'name' => $this->site->name,
+                'name' => $this->site->getName(),
                 'live' => true,
                 'schemaVersion' => Craft::$app->schemaVersion,
                 'timeZone' => 'America/Los_Angeles',

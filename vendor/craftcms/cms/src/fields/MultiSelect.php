@@ -11,6 +11,7 @@ use Craft;
 use craft\base\ElementInterface;
 use craft\fields\data\MultiOptionsFieldData;
 use craft\helpers\ArrayHelper;
+use craft\helpers\Html;
 
 /**
  * MultiSelect represents a Multi-select field.
@@ -51,12 +52,15 @@ class MultiSelect extends BaseOptionsField
      */
     protected function inputHtml($value, ElementInterface $element = null): string
     {
-        /** @var MultiOptionsFieldData $value */
+        /* @var MultiOptionsFieldData $value */
         if (ArrayHelper::contains($value, 'valid', false, true)) {
             Craft::$app->getView()->setInitialDeltaValue($this->handle, null);
         }
 
+        $id = Html::id($this->handle);
         return Craft::$app->getView()->renderTemplate('_includes/forms/multiselect', [
+            'id' => $id,
+            'instructionsId' => "$id-instructions",
             'name' => $this->handle,
             'values' => $value,
             'options' => $this->translatedOptions(),

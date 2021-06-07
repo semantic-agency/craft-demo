@@ -10,10 +10,12 @@ namespace craft\services;
 use Craft;
 use craft\base\ElementInterface;
 use craft\elements\db\ElementQuery;
+use craft\helpers\DateTimeHelper;
 use craft\helpers\StringHelper;
 use DateTime;
 use yii\base\Component;
 use yii\base\Event;
+use yii\base\Exception;
 
 /**
  * Template Caches service.
@@ -56,6 +58,7 @@ class TemplateCaches extends Component
      * @param string $key The template cache key
      * @param bool $global Whether the cache would have been stored globally.
      * @return string|null
+     * @throws Exception if this is a console request and `false` is passed to `$global`
      */
     public function getTemplateCache(string $key, bool $global)
     {
@@ -71,7 +74,7 @@ class TemplateCaches extends Component
             return null;
         }
 
-        list($body, $tags) = $data;
+        [$body, $tags] = $data;
 
         // If we're actively collecting element cache tags, add this cache's tags to the collection
         Craft::$app->getElements()->collectCacheTags($tags);
@@ -119,9 +122,10 @@ class TemplateCaches extends Component
      * @param string|null $duration How long the cache should be stored for. Should be a [relative time format](http://php.net/manual/en/datetime.formats.relative.php).
      * @param mixed|null $expiration When the cache should expire.
      * @param string $body The contents of the cache.
+     * @throws Exception if this is a console request and `false` is passed to `$global`
      * @throws \Throwable
      */
-    public function endTemplateCache(string $key, bool $global, string $duration = null, $expiration, string $body)
+    public function endTemplateCache(string $key, bool $global, ?string $duration, $expiration, string $body)
     {
         // Make sure template caching is enabled
         if ($this->_isTemplateCachingEnabled() === false) {
@@ -140,9 +144,15 @@ class TemplateCaches extends Component
         }
 
         $cacheKey = $this->_cacheKey($key, $global);
+
         if ($duration !== null) {
-            $duration = (new DateTime($duration))->getTimestamp() - time();
+            $expiration = (new DateTime($duration));
         }
+
+        if ($expiration !== null) {
+            $duration = DateTimeHelper::toDateTime($expiration)->getTimestamp() - time();
+        }
+
         Craft::$app->getCache()->set($cacheKey, [$body, $dep->tags], $duration, $dep);
     }
 
@@ -241,16 +251,26 @@ class TemplateCaches extends Component
     /**
      * Deletes a cache by its key(s).
      *
-     * @param int|array $key The cache key(s) to delete.
+     * @param string|string[] $key The cache key(s) to delete.
+     * @param bool|null $global Whether the template caches are stored globally.
+     * @param int|null $siteId The site ID to delete caches for.
      * @return bool
-     * @deprecated in 3.5.0
+     * @throws Exception if this is a console request and `null` or `false` is passed to `$global`
      */
-    public function deleteCachesByKey($key): bool
+    public function deleteCachesByKey($key, ?bool $global = null, ?int $siteId = null): bool
     {
         $cache = Craft::$app->getCache();
-        // ¯\_(ツ)_/¯
-        $cache->delete($this->_cacheKey($key, true));
-        $cache->delete($this->_cacheKey($key, false));
+
+        if ($global === null) {
+            $this->deleteCachesByKey($key, true, $siteId);
+            $this->deleteCachesByKey($key, false, $siteId);
+            return true;
+        }
+
+        foreach ((array)$key as $k) {
+            $cache->delete($this->_cacheKey($k, $global, $siteId));
+        }
+
         return true;
     }
 
@@ -309,10 +329,12 @@ class TemplateCaches extends Component
      *
      * @param string $key
      * @param bool $global
+     * @param int|null $siteId
+     * @throws Exception if this is a console request and `false` is passed to `$global`
      */
-    private function _cacheKey(string $key, bool $global): string
+    private function _cacheKey(string $key, bool $global, int $siteId = null): string
     {
-        $cacheKey = "template::$key::" . Craft::$app->getSites()->getCurrentSite()->id;
+        $cacheKey = "template::$key::" . ($siteId ?? Craft::$app->getSites()->getCurrentSite()->id);
 
         if (!$global) {
             $cacheKey .= '::' . $this->_path();
@@ -325,11 +347,17 @@ class TemplateCaches extends Component
      * Returns the current request path, including a "site:" or "cp:" prefix.
      *
      * @return string
+     * @throws Exception if this is a console request
      */
     private function _path(): string
     {
         if ($this->_path !== null) {
             return $this->_path;
+        }
+
+        $request = Craft::$app->getRequest();
+        if ($request->getIsConsoleRequest()) {
+            throw new Exception('Not possible to determine the request path for console commands.');
         }
 
         if (Craft::$app->getRequest()->getIsCpRequest()) {

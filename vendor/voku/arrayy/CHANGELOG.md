@@ -1,5 +1,28 @@
 # Changelog
 
+### 7.8.9 (2021-03-29)
+
+- fix code style
+- use Github Actions
+
+### 7.8.8 (2021-03-09)
+
+- add more support for Generics + phpstan checks
+
+### 7.8.7 (20201-01-30)
+
+- optimize Json Mapper with nested Arrayy elements
+
+### 7.8.6 (2020-12-06)
+
+- add more support for Generics + phpstan checks
+
+### 7.8.5 (2020-11-02)
+
+- use more Generators v3.1
+- add more support for Generics + phpstan checks
+- auto-generate the README
+
 ### 7.8.4 (2020-09-06)
 
 - fix some internal Generator usage
