@@ -30,7 +30,7 @@ private static $installed = array (
     'aliases' => 
     array (
     ),
-    'reference' => '22a962b5694e74ccbc3323b5ee4b360ff8f010bc',
+    'reference' => 'bf258224fa8295acd1cdfc8bcfee0f4bb54299c6',
     'name' => '__root__',
   ),
   'versions' => 
@@ -42,7 +42,7 @@ private static $installed = array (
       'aliases' => 
       array (
       ),
-      'reference' => '22a962b5694e74ccbc3323b5ee4b360ff8f010bc',
+      'reference' => 'bf258224fa8295acd1cdfc8bcfee0f4bb54299c6',
     ),
     'bower-asset/inputmask' => 
     array (
@@ -288,39 +288,39 @@ private static $installed = array (
     ),
     'laminas/laminas-escaper' => 
     array (
-      'pretty_version' => '2.7.0',
-      'version' => '2.7.0.0',
+      'pretty_version' => '2.6.1',
+      'version' => '2.6.1.0',
       'aliases' => 
       array (
       ),
-      'reference' => '5e04bc5ae5990b17159d79d331055e2c645e5cc5',
+      'reference' => '25f2a053eadfa92ddacb609dcbbc39362610da70',
     ),
     'laminas/laminas-feed' => 
     array (
-      'pretty_version' => '2.14.1',
-      'version' => '2.14.1.0',
+      'pretty_version' => '2.12.3',
+      'version' => '2.12.3.0',
       'aliases' => 
       array (
       ),
-      'reference' => '463fdae515fba30633906098c258d3b2c733c15c',
+      'reference' => '3c91415633cb1be6f9d78683d69b7dcbfe6b4012',
     ),
     'laminas/laminas-stdlib' => 
     array (
-      'pretty_version' => '3.3.1',
-      'version' => '3.3.1.0',
+      'pretty_version' => '3.2.1',
+      'version' => '3.2.1.0',
       'aliases' => 
       array (
       ),
-      'reference' => 'd81c7ffe602ed0e6ecb18691019111c0f4bf1efe',
+      'reference' => '2b18347625a2f06a1a485acfbc870f699dbe51c6',
     ),
     'laminas/laminas-zendframework-bridge' => 
     array (
-      'pretty_version' => '1.2.0',
-      'version' => '1.2.0.0',
+      'pretty_version' => '1.1.1',
+      'version' => '1.1.1.0',
       'aliases' => 
       array (
       ),
-      'reference' => '6cccbddfcfc742eb02158d6137ca5687d92cee32',
+      'reference' => '6ede70583e101030bcace4dcddd648f760ddf642',
     ),
     'league/flysystem' => 
     array (
@@ -851,7 +851,7 @@ private static $installed = array (
     array (
       'replaced' => 
       array (
-        0 => '^2.6.1',
+        0 => '2.6.1',
       ),
     ),
     'zendframework/zend-feed' => 
@@ -865,7 +865,7 @@ private static $installed = array (
     array (
       'replaced' => 
       array (
-        0 => '^3.2.1',
+        0 => '3.2.1',
       ),
     ),
   ),
