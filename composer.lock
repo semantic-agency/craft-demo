@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "d9cd462d3a336efcee1ff1c055fc2e64",
+    "content-hash": "744ed888817a6046c004a3e674626cf5",
     "packages": [
         {
             "name": "cebe/markdown",
@@ -539,16 +539,16 @@
         },
         {
             "name": "craftcms/cms",
-            "version": "3.7.x-dev",
+            "version": "3.7.0-beta.3",
             "source": {
                 "type": "git",
                 "url": "https://github.com/craftcms/cms.git",
-                "reference": "7988b0508ef3b2c34d08a8fdee87a4504928b7e3"
+                "reference": "ad83ae1d13ea10a2ae83694ca6a6d08ddee0220b"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/craftcms/cms/zipball/7988b0508ef3b2c34d08a8fdee87a4504928b7e3",
-                "reference": "7988b0508ef3b2c34d08a8fdee87a4504928b7e3",
+                "url": "https://api.github.com/repos/craftcms/cms/zipball/ad83ae1d13ea10a2ae83694ca6a6d08ddee0220b",
+                "reference": "ad83ae1d13ea10a2ae83694ca6a6d08ddee0220b",
                 "shasum": ""
             },
             "require": {
@@ -644,7 +644,7 @@
                 "rss": "https://github.com/craftcms/cms/releases.atom",
                 "source": "https://github.com/craftcms/cms"
             },
-            "time": "2021-06-15T16:56:01+00:00"
+            "time": "2021-06-22T23:04:48+00:00"
         },
         {
             "name": "craftcms/oauth2-craftid",
@@ -2358,16 +2358,16 @@
         },
         {
             "name": "pixelandtonic/imagine",
-            "version": "1.2.4.1",
+            "version": "1.2.4.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/pixelandtonic/Imagine.git",
-                "reference": "2bedcf2dfab50a22126498a16241944c9d4cde65"
+                "reference": "5ee4b6a365497818815ba50738c8dcbb555c9fd3"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/pixelandtonic/Imagine/zipball/2bedcf2dfab50a22126498a16241944c9d4cde65",
-                "reference": "2bedcf2dfab50a22126498a16241944c9d4cde65",
+                "url": "https://api.github.com/repos/pixelandtonic/Imagine/zipball/5ee4b6a365497818815ba50738c8dcbb555c9fd3",
+                "reference": "5ee4b6a365497818815ba50738c8dcbb555c9fd3",
                 "shasum": ""
             },
             "require": {
@@ -2413,9 +2413,9 @@
                 "image processing"
             ],
             "support": {
-                "source": "https://github.com/pixelandtonic/Imagine/tree/1.2.4.1"
+                "source": "https://github.com/pixelandtonic/Imagine/tree/1.2.4.2"
             },
-            "time": "2020-11-05T18:36:18+00:00"
+            "time": "2021-06-22T18:26:46+00:00"
         },
         {
             "name": "psr/container",
@@ -2957,16 +2957,16 @@
         },
         {
             "name": "symfony/console",
-            "version": "v5.3.0",
+            "version": "v5.3.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/console.git",
-                "reference": "058553870f7809087fa80fa734704a21b9bcaeb2"
+                "reference": "649730483885ff2ca99ca0560ef0e5f6b03f2ac1"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/console/zipball/058553870f7809087fa80fa734704a21b9bcaeb2",
-                "reference": "058553870f7809087fa80fa734704a21b9bcaeb2",
+                "url": "https://api.github.com/repos/symfony/console/zipball/649730483885ff2ca99ca0560ef0e5f6b03f2ac1",
+                "reference": "649730483885ff2ca99ca0560ef0e5f6b03f2ac1",
                 "shasum": ""
             },
             "require": {
@@ -3035,7 +3035,7 @@
                 "terminal"
             ],
             "support": {
-                "source": "https://github.com/symfony/console/tree/v5.3.0"
+                "source": "https://github.com/symfony/console/tree/v5.3.2"
             },
             "funding": [
                 {
@@ -3051,7 +3051,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2021-05-26T17:43:10+00:00"
+            "time": "2021-06-12T09:42:48+00:00"
         },
         {
             "name": "symfony/deprecation-contracts",
@@ -3974,16 +3974,16 @@
         },
         {
             "name": "symfony/process",
-            "version": "v5.3.0",
+            "version": "v5.3.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/process.git",
-                "reference": "53e36cb1c160505cdaf1ef201501669c4c317191"
+                "reference": "714b47f9196de61a196d86c4bad5f09201b307df"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/process/zipball/53e36cb1c160505cdaf1ef201501669c4c317191",
-                "reference": "53e36cb1c160505cdaf1ef201501669c4c317191",
+                "url": "https://api.github.com/repos/symfony/process/zipball/714b47f9196de61a196d86c4bad5f09201b307df",
+                "reference": "714b47f9196de61a196d86c4bad5f09201b307df",
                 "shasum": ""
             },
             "require": {
@@ -4016,7 +4016,7 @@
             "description": "Executes commands in sub-processes",
             "homepage": "https://symfony.com",
             "support": {
-                "source": "https://github.com/symfony/process/tree/v5.3.0"
+                "source": "https://github.com/symfony/process/tree/v5.3.2"
             },
             "funding": [
                 {
@@ -4032,7 +4032,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2021-05-26T12:52:38+00:00"
+            "time": "2021-06-12T10:15:01+00:00"
         },
         {
             "name": "symfony/service-contracts",
@@ -4115,16 +4115,16 @@
         },
         {
             "name": "symfony/string",
-            "version": "v5.3.0",
+            "version": "v5.3.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/string.git",
-                "reference": "a9a0f8b6aafc5d2d1c116dcccd1573a95153515b"
+                "reference": "0732e97e41c0a590f77e231afc16a327375d50b0"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/string/zipball/a9a0f8b6aafc5d2d1c116dcccd1573a95153515b",
-                "reference": "a9a0f8b6aafc5d2d1c116dcccd1573a95153515b",
+                "url": "https://api.github.com/repos/symfony/string/zipball/0732e97e41c0a590f77e231afc16a327375d50b0",
+                "reference": "0732e97e41c0a590f77e231afc16a327375d50b0",
                 "shasum": ""
             },
             "require": {
@@ -4178,7 +4178,7 @@
                 "utf8"
             ],
             "support": {
-                "source": "https://github.com/symfony/string/tree/v5.3.0"
+                "source": "https://github.com/symfony/string/tree/v5.3.2"
             },
             "funding": [
                 {
@@ -4194,20 +4194,20 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2021-05-26T17:43:10+00:00"
+            "time": "2021-06-06T09:51:56+00:00"
         },
         {
             "name": "symfony/yaml",
-            "version": "v5.3.0",
+            "version": "v5.3.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/yaml.git",
-                "reference": "3bbcf262fceb3d8f48175302e6ba0ac96e3a5a11"
+                "reference": "71719ab2409401711d619765aa255f9d352a59b2"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/yaml/zipball/3bbcf262fceb3d8f48175302e6ba0ac96e3a5a11",
-                "reference": "3bbcf262fceb3d8f48175302e6ba0ac96e3a5a11",
+                "url": "https://api.github.com/repos/symfony/yaml/zipball/71719ab2409401711d619765aa255f9d352a59b2",
+                "reference": "71719ab2409401711d619765aa255f9d352a59b2",
                 "shasum": ""
             },
             "require": {
@@ -4253,7 +4253,7 @@
             "description": "Loads and dumps YAML files",
             "homepage": "https://symfony.com",
             "support": {
-                "source": "https://github.com/symfony/yaml/tree/v5.3.0"
+                "source": "https://github.com/symfony/yaml/tree/v5.3.2"
             },
             "funding": [
                 {
@@ -4269,7 +4269,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2021-05-26T17:43:10+00:00"
+            "time": "2021-06-06T09:51:56+00:00"
         },
         {
             "name": "true/punycode",
@@ -4561,16 +4561,16 @@
         },
         {
             "name": "voku/arrayy",
-            "version": "7.8.9",
+            "version": "7.8.10",
             "source": {
                 "type": "git",
                 "url": "https://github.com/voku/Arrayy.git",
-                "reference": "d26e7d59ac2f6eb891b77c48bfdb9fe1e76afa60"
+                "reference": "d9b0b1b398f1b19c3c8d72386f5df3764b877052"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/voku/Arrayy/zipball/d26e7d59ac2f6eb891b77c48bfdb9fe1e76afa60",
-                "reference": "d26e7d59ac2f6eb891b77c48bfdb9fe1e76afa60",
+                "url": "https://api.github.com/repos/voku/Arrayy/zipball/d9b0b1b398f1b19c3c8d72386f5df3764b877052",
+                "reference": "d9b0b1b398f1b19c3c8d72386f5df3764b877052",
                 "shasum": ""
             },
             "require": {
@@ -4640,7 +4640,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2021-03-29T13:31:10+00:00"
+            "time": "2021-06-18T23:23:37+00:00"
         },
         {
             "name": "voku/email-check",
@@ -5732,17 +5732,10 @@
         }
     ],
     "packages-dev": [],
-    "aliases": [
-        {
-            "package": "craftcms/cms",
-            "version": "3.7.9999999.9999999-dev",
-            "alias": "3.7.0-beta.1",
-            "alias_normalized": "3.7.0.0-beta1"
-        }
-    ],
+    "aliases": [],
     "minimum-stability": "stable",
     "stability-flags": {
-        "craftcms/cms": 20
+        "craftcms/cms": 10
     },
     "prefer-stable": false,
     "prefer-lowest": false,
