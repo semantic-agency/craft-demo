@@ -1,6 +1,9 @@
 /.env
 /.idea
 /vendor
+/craft/storage/*
+/storage/*
+/plugins/craft-translations
 .DS_Store
 *.sass-cache/
 node_modules

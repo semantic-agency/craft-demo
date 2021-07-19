@@ -1,0 +1,53 @@
+descriptionFormat: ''
+handle: clothing
+hasDimensions: true
+hasProductTitleField: true
+hasVariantTitleField: true
+hasVariants: false
+name: Clothing
+productFieldLayouts:
+  66c252aa-d05c-435f-aae7-579295e9845f:
+    tabs:
+      -
+        elements:
+          -
+            autocapitalize: true
+            autocomplete: false
+            autocorrect: true
+            class: null
+            disabled: false
+            id: null
+            instructions: null
+            label: null
+            max: null
+            min: null
+            name: null
+            orientation: null
+            placeholder: null
+            readonly: false
+            requirable: false
+            size: null
+            step: null
+            tip: null
+            title: null
+            type: craft\commerce\fieldlayoutelements\ProductTitleField
+            warning: null
+            width: 100
+        name: Content
+        sortOrder: 1
+productTitleFormat: ''
+siteSettings:
+  06f4e499-3cdc-4d64-aec2-9a7d3a143c75: # Happy Lager (en)
+    hasUrls: true
+    template: shop/products/_product
+    uriFormat: 'shop/products/{slug}'
+  751575f8-99dd-42c4-a5f8-69e48773ad7f: # Happy Lager (es)
+    hasUrls: true
+    template: shop/products/_product
+    uriFormat: 'shop/products/{slug}'
+  b50df2c6-3c2c-4215-b2a6-60926c2559e3: # Happy Lager (de)
+    hasUrls: true
+    template: shop/products/_product
+    uriFormat: 'shop/products/{slug}'
+skuFormat: ''
+titleFormat: '{product.title}'

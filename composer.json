@@ -1,9 +1,20 @@
 {
   "require": {
+    "acclaro/translations": "@dev",
     "php": ">=7.0.0",
     "craftcms/cms": "^3.6.17",
+    "craftcms/commerce": "^3.4.0",
+    "craftcms/feed-me": "^4.3.5.1",
+    "enupal/translate": "^2.0.0",
+    "ether/seo": "3.7.4",
+    "ether/simplemap": "^3.8.1",
+    "jdsdev/craft-embedder": "^2.0",
+    "newism/craft3-fields": "2.0.0-RC3",
+    "sebastianlenz/linkfield": "^2.0.0-beta.10",
     "vlucas/phpdotenv": "^2.4.0",
-    "craftcms/redactor": "^2.8.7"
+    "craftcms/redactor": "^2.8.7",
+    "verbb/super-table": "^2.6",
+    "nystudio107/craft-seomatic": "^3.3"
   },
   "autoload": {
     "psr-4": {
@@ -16,6 +27,12 @@
       "php": "8.0"
     }
   },
+  "repositories": [
+    {
+      "type": "path",
+      "url": "plugins/craft-translations"
+    }
+  ],
   "scripts": {
     "post-root-package-install": [
       "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""

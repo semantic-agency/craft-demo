@@ -1,0 +1,9 @@
+baseUrl: '@web/es'
+enabled: true
+handle: happyLagerEs
+hasUrls: true
+language: es
+name: 'Happy Lager (es)'
+primary: false
+siteGroup: 268c3c49-6715-4b6a-a1b9-f27313adabd1 # Happy Lager (en)
+sortOrder: 2
